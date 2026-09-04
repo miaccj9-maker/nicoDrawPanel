@@ -1,26 +1,38 @@
-/* Qixian Draw Panel (Nico Draw Panel) - SillyTavern Extension v1.10.4
+/* Qixian Draw Panel (Nico Draw Panel) - SillyTavern Extension v1.10.7
    角色抽屉面板：从屏幕顶部下拉展开角色资料卡 + 音乐播放器 + 图片库 + 弹幕歌词。
    所有样式类名 / ID / 全局变量统一使用 nico 前缀（nico-* / Nico-* / __nico_*），
    与 nicoPhone 系列组件保持命名一致，避免与其他扩展的旧前缀类名冲突。
    音乐播放器支持"搜歌名/歌手搜歌"（多引擎兜底搜索，自动校验可播直链）。
    v1.8.0 进度条+弹幕歌词；v1.9.0 导航编辑+快拍替换；v1.10.0 歌单移除+持久化。
    v1.10.2 手机端占满+图片限高62vh+拖拽条常驻；v1.10.3 滚动条彻底隐藏。
-   v1.10.4 进度条拖动不打断播放：
-     · 拖动过程中只实时预览 UI（填充条/时间），不再逐帧写 au.currentTime，
-       彻底避免对正在播放的流媒体反复 seek 触发缓冲而导致的暂停/卡顿；
-     · 仅在手/鼠标松开时提交一次 seek（点击进度条行为不变，仍立即跳转）；
-     · 纯事件逻辑，无轮询无高开销，不影响酒馆性能。
+   v1.10.4 进度条拖动不打断播放；v1.10.5 配色跟随酒馆主题。
+   v1.10.6 文字清晰度 + 防泛光精进：
+     · 所有次要文字（Name/Height/age 标签、播放时间、占位符、歌单删除、GALLERY
+       空提示等）不再使用主题 EmColor（该色在某些主题下与深色背景对比不足、
+       发灰看不清），统一改为"主文字色 + 透明度"方案：文字永远基于
+       --SmartThemeBodyColor，按透明度降为次要层级，任何深浅主题下都与背景
+       保持高对比、清晰可见；
+     · 移除面板/按钮/进度条上的强阴影（box-shadow 不再引用主题 ShadowColor），
+       消除深色主题下的模块泛光感，界面更干净；
+     · 歌词模块阴影减弱到刚好保证可读性，不产生光晕；
+     · 纯 CSS 调整，零 JS 开销，不造成酒馆卡顿。
+   v1.10.7 图片占满+手机端底部修复：
+     · 图片库大图改为 width:100% + height:auto 等比例占满，移除 max-height:62vh
+       与 object-fit:contain，消除竖图两侧留白，整图不裁切、不拉伸；
+     · 面板高度改为 height:100vh;height:100dvh（dvh 优先），修复移动端浏览器
+       地址栏导致的底部被截断——底部横线收起按钮与图片删除按钮现在可见可点；
+     · 纯 CSS 调整，零 JS 开销，不造成酒馆卡顿。
    已移除原组件中的"全域文本阅读器"(STORY ARCHIVE / MutationObserver 文本捕获)。
    所有 DOM 直接注入酒馆主页面，无 iframe 间接层。 */
 (function(){
 'use strict';
-try{console.log('%c[Nico-Draw-Panel] v1.10.4 已加载：进度条拖动不暂停·功能完整','color:#818cf8;font-weight:bold');}catch(e){}
+try{console.log('%c[Nico-Draw-Panel] v1.10.6 已加载：文字清晰·防泛光·零卡顿','color:#818cf8;font-weight:bold');}catch(e){}
 
 var CSS_ID='Nico-Draw-Style', PANEL_ID='Nico-Draw-Panel';
 
 /* ============ CSS (scoped to panel, 已移除阅读器相关样式) ============ */
 var CSS = `
-#Nico-Draw-Panel{position:fixed;top:0;bottom:0;left:50%;transform:translate3d(-50%,-100%,0);z-index:9999!important;background:#FFF!important;color:#000;width:100%;max-width:450px;height:100dvh;height:100vh;display:flex;flex-direction:column;font-family:-apple-system,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,.08);transition:transform .3s cubic-bezier(.25,.8,.25,1);will-change:transform;-webkit-backface-visibility:hidden;backface-visibility:hidden;overflow:hidden;contain:content;}
+#Nico-Draw-Panel{position:fixed;top:0;bottom:0;left:50%;transform:translate3d(-50%,-100%,0);z-index:9999!important;background:var(--SmartThemeBlurTintColor,#FFF)!important;color:var(--SmartThemeBodyColor,#000);width:100%;max-width:450px;height:100vh;height:100dvh;display:flex;flex-direction:column;font-family:-apple-system,sans-serif;box-shadow:0 2px 14px rgba(0,0,0,0.16);transition:transform .3s cubic-bezier(.25,.8,.25,1);will-change:transform;-webkit-backface-visibility:hidden;backface-visibility:hidden;overflow:hidden;contain:content;}
 #Nico-Draw-Panel.is-open{transform:translate3d(-50%,0,0);}
 @media(max-width:768px){#Nico-Draw-Panel{max-width:100%;left:0;box-shadow:none;transform:translate3d(0,-100%,0);}#Nico-Draw-Panel.is-open{transform:translate3d(0,0,0);}}
 .nico-p-in{flex:1 1 0;min-height:0;overflow-y:auto;scrollbar-width:none;-ms-overflow-style:none;scrollbar-color:transparent transparent;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
@@ -28,117 +40,182 @@ var CSS = `
 /* 全局滚动条隐藏兜底：面板内任何滚动容器都不显示滚动条，滚动功能保留 */
 #Nico-Draw-Panel, #Nico-Draw-Panel *{scrollbar-width:none;-ms-overflow-style:none;scrollbar-color:transparent transparent;}
 #Nico-Draw-Panel::-webkit-scrollbar, #Nico-Draw-Panel ::-webkit-scrollbar{display:none;width:0;height:0;background:transparent;}
-.nico-nav{position:relative;display:flex;align-items:center;justify-content:center;height:50px;border-bottom:1px solid rgba(0,0,0,0.12);font-weight:700;font-size:16px;margin-top:10px;flex-shrink:0;padding-top:env(safe-area-inset-top,0px);box-sizing:content-box;}
+.nico-nav{position:relative;display:flex;align-items:center;justify-content:center;height:50px;border-bottom:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,0.12));font-weight:700;font-size:16px;margin-top:10px;flex-shrink:0;padding-top:env(safe-area-inset-top,0px);box-sizing:content-box;}
 .nico-nav-txt{cursor:pointer;outline:none;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .nico-hdr{display:flex;align-items:center;padding:16px;gap:24px;flex-shrink:0;}
 .nico-av-bx{position:relative;width:80px;height:80px;border-radius:50%;background:linear-gradient(45deg,#c0c0c0,#a0a0a0,#808080);padding:3px;flex-shrink:0;}
-.nico-av-in{width:100%;height:100%;border-radius:50%;background:#fafafa;border:2px solid #FFF;object-fit:cover;}
+.nico-av-in{width:100%;height:100%;border-radius:50%;background:var(--SmartThemeChatTintColor,#fafafa);border:2px solid var(--SmartThemeBlurTintColor,#FFF);object-fit:cover;}
 .nico-stats{display:flex;flex:1;justify-content:space-around;}
 .nico-st-it{display:flex;flex-direction:column;align-items:center;}
 .nico-st-v{font-size:16px;font-weight:700;}
-.nico-st-l{font-size:13px;color:rgba(0,0,0,0.6);}
+.nico-st-l{font-size:13px;color:var(--SmartThemeBodyColor,#000);opacity:.62;}
 .nico-bio{padding:0 16px 12px;font-size:14px;line-height:1.5;flex-shrink:0;}
 .nico-b-id{font-weight:600;}
-.nico-hlt{display:flex;gap:14px;padding:8px 16px 16px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;scrollbar-color:transparent transparent;-webkit-overflow-scrolling:touch;border-bottom:1px solid rgba(0,0,0,0.12);margin-bottom:12px;flex-shrink:0;transform:translateZ(0);}
+.nico-hlt{display:flex;gap:14px;padding:8px 16px 16px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;scrollbar-color:transparent transparent;-webkit-overflow-scrolling:touch;border-bottom:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,0.12));margin-bottom:12px;flex-shrink:0;transform:translateZ(0);}
 .nico-hlt::-webkit-scrollbar{display:none;}
 .nico-sty{display:flex;flex-direction:column;align-items:center;gap:4px;}
-.nico-s-rng{width:60px;height:60px;border-radius:50%;border:1px solid rgba(0,0,0,0.12);background:#f5f5f7;padding:2px;cursor:pointer;}
-.nico-s-in{width:100%;height:100%;border-radius:50%;background:#fafafa;object-fit:cover;}
-.nico-s-nm{font-size:12px;color:#000;}
-.nico-s-rl{font-size:10px;color:rgba(0,0,0,0.6);margin-top:-3px;}
-.nico-m-box{margin:0 16px 16px;border:1px solid rgba(0,0,0,0.08);border-radius:12px;padding:12px;background:#fefefe;flex-shrink:0;}
+.nico-s-rng{width:60px;height:60px;border-radius:50%;border:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,0.12));background:var(--SmartThemeChatTintColor,#f5f5f7);padding:2px;cursor:pointer;}
+.nico-s-in{width:100%;height:100%;border-radius:50%;background:var(--SmartThemeChatTintColor,#fafafa);object-fit:cover;}
+.nico-s-nm{font-size:12px;color:var(--SmartThemeBodyColor,#000);}
+.nico-s-rl{font-size:10px;color:var(--SmartThemeBodyColor,#000);opacity:.55;margin-top:-3px;}
+.nico-m-box{margin:0 16px 16px;border:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,0.08));border-radius:12px;padding:12px;background:var(--SmartThemeChatTintColor,#fefefe);flex-shrink:0;}
 .nico-m-inf{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
 .nico-m-prog{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-shrink:0;}
-.nico-m-pt{font-size:10px;color:#999;min-width:32px;text-align:center;font-variant-numeric:tabular-nums;}
+.nico-m-pt{font-size:10px;color:var(--SmartThemeBodyColor,#000);opacity:.55;min-width:32px;text-align:center;font-variant-numeric:tabular-nums;}
 .nico-m-bar{flex:1;height:18px;display:flex;align-items:center;cursor:pointer;position:relative;touch-action:none;}
-.nico-m-fill{position:absolute;left:0;top:50%;transform:translateY(-50%);height:4px;border-radius:2px;background:#111;width:0%;pointer-events:none;}
-.nico-m-knob{position:absolute;top:50%;left:0%;width:12px;height:12px;border-radius:50%;background:#111;transform:translate(-50%,-50%);box-shadow:0 1px 4px rgba(0,0,0,.3);pointer-events:none;transition:transform .15s;}
+.nico-m-fill{position:absolute;left:0;top:50%;transform:translateY(-50%);height:4px;border-radius:2px;background:var(--SmartThemeBodyColor,#111);width:0%;pointer-events:none;}
+.nico-m-knob{position:absolute;top:50%;left:0%;width:12px;height:12px;border-radius:50%;background:var(--SmartThemeBodyColor,#111);transform:translate(-50%,-50%);box-shadow:0 1px 3px rgba(0,0,0,0.2);pointer-events:none;transition:transform .15s;}
 .nico-m-bar:active .nico-m-knob{transform:translate(-50%,-50%) scale(1.25);}
 .nico-m-src{display:flex;gap:6px;margin-bottom:10px;align-items:center;}
-.nico-m-src input{flex:1;min-width:0;background:#f0f0f2;border:none;border-radius:8px;padding:7px 10px;font-size:12px;color:#222;outline:none;transition:all .2s;}
-.nico-m-src input:focus{background:#e8e8eb;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.1);}
-.nico-m-src input::placeholder{color:#bbb;}
-.nico-m-src button{background:#111;color:#fff;border:none;border-radius:12px;padding:5px 14px;font-size:11px;font-weight:700;letter-spacing:0.5px;cursor:pointer;transition:all .2s cubic-bezier(0.25,0.8,0.25,1);box-shadow:0 2px 6px rgba(0,0,0,0.15);flex-shrink:0;min-width:40px;}
+.nico-m-src input{flex:1;min-width:0;background:var(--SmartThemeChatTintColor,#f0f0f2);border:none;border-radius:8px;padding:7px 10px;font-size:12px;color:var(--SmartThemeBodyColor,#222);outline:none;transition:all .2s;}
+.nico-m-src input:focus{background:var(--SmartThemeChatTintColor,#e8e8eb);box-shadow:inset 0 0 0 1px var(--SmartThemeBorderColor,rgba(0,0,0,0.1));}
+.nico-m-src input::placeholder{color:var(--SmartThemeBodyColor,#000);opacity:.42;}
+.nico-m-src button{background:var(--SmartThemeBodyColor,#111);color:var(--SmartThemeBlurTintColor,#fff);border:none;border-radius:12px;padding:5px 14px;font-size:11px;font-weight:700;letter-spacing:0.5px;cursor:pointer;transition:all .2s cubic-bezier(0.25,0.8,0.25,1);flex-shrink:0;min-width:40px;}
 .nico-m-src button:active{transform:scale(0.92);}
 .nico-m-src button:disabled{opacity:.6;cursor:default;}
 .nico-m-res{display:none;margin-bottom:10px;}
 .nico-m-res.show{display:block;}
-.nico-m-res-it{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 2px;border-bottom:1px solid rgba(0,0,0,0.05);}
-.nico-m-res-name{font-size:12px;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;}
-.nico-m-res-add{background:none;border:1px solid rgba(0,0,0,0.18);border-radius:10px;padding:3px 12px;font-size:11px;color:#111;cursor:pointer;flex-shrink:0;transition:all .2s;}
-.nico-m-res-add:active{transform:scale(0.92);background:#111;color:#fff;}
-.nico-m-res-add.added{background:#111;color:#fff;border-color:#111;pointer-events:none;}
-.nico-m-tit{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%;color:#111;}
-.nico-m-tmr{display:flex;align-items:center;gap:6px;font-size:11px;color:#888;font-weight:500;}
+.nico-m-res-it{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 2px;border-bottom:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,0.05));}
+.nico-m-res-name{font-size:12px;color:var(--SmartThemeBodyColor,#333);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;}
+.nico-m-res-add{background:none;border:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,0.18));border-radius:10px;padding:3px 12px;font-size:11px;color:var(--SmartThemeBodyColor,#111);cursor:pointer;flex-shrink:0;transition:all .2s;}
+.nico-m-res-add:active{transform:scale(0.92);background:var(--SmartThemeBodyColor,#111);color:var(--SmartThemeBlurTintColor,#fff);}
+.nico-m-res-add.added{background:var(--SmartThemeBodyColor,#111);color:var(--SmartThemeBlurTintColor,#fff);border-color:var(--SmartThemeBodyColor,#111);pointer-events:none;}
+.nico-m-tit{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%;color:var(--SmartThemeBodyColor,#111);}
+.nico-m-tmr{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--SmartThemeBodyColor,#000);font-weight:500;}
 .nico-m-tmr input[type="number"]::-webkit-inner-spin-button,
 .nico-m-tmr input[type="number"]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
 .nico-m-tmr input[type="number"]{-moz-appearance:textfield;}
-.nico-m-tmr input{width:36px;background:#f0f0f2;border:none;border-radius:6px;text-align:center;font-size:12px;font-weight:600;color:#222;padding:4px 0;outline:none;transition:all .2s;}
-.nico-m-tmr input:focus{background:#e8e8eb;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.1);}
-.nico-m-tmr button{background:#111;color:#fff;border:none;border-radius:12px;padding:4px 12px;font-size:10px;font-weight:700;letter-spacing:0.5px;cursor:pointer;transition:all .2s cubic-bezier(0.25,0.8,0.25,1);box-shadow:0 2px 6px rgba(0,0,0,0.15);}
+.nico-m-tmr input{width:36px;background:var(--SmartThemeChatTintColor,#f0f0f2);border:none;border-radius:6px;text-align:center;font-size:12px;font-weight:600;color:var(--SmartThemeBodyColor,#222);padding:4px 0;outline:none;transition:all .2s;}
+.nico-m-tmr input:focus{background:var(--SmartThemeChatTintColor,#e8e8eb);box-shadow:inset 0 0 0 1px var(--SmartThemeBorderColor,rgba(0,0,0,0.1));}
+.nico-m-tmr button{background:var(--SmartThemeBodyColor,#111);color:var(--SmartThemeBlurTintColor,#fff);border:none;border-radius:12px;padding:4px 12px;font-size:10px;font-weight:700;letter-spacing:0.5px;cursor:pointer;transition:all .2s cubic-bezier(0.25,0.8,0.25,1);}
 .nico-m-tmr button:active{transform:scale(0.92);}
 .nico-m-tmr button.on{background:#EF4444;box-shadow:0 2px 8px rgba(239,68,68,0.3);}
 .nico-m-ctr{display:flex;justify-content:space-around;align-items:center;}
-.nico-m-ctr svg{width:20px;height:20px;fill:#222;cursor:pointer;transition:opacity .2s;}
+.nico-m-ctr svg{width:20px;height:20px;fill:var(--SmartThemeBodyColor,#222);cursor:pointer;transition:opacity .2s;}
 .nico-m-ctr svg:active{opacity:0.5;}
-.nico-m-lst{display:none;max-height:110px;overflow-y:auto;margin-top:10px;border-top:1px solid rgba(0,0,0,0.06);padding-top:6px;scrollbar-width:none;-ms-overflow-style:none;scrollbar-color:transparent transparent;}
+.nico-m-lst{display:none;max-height:110px;overflow-y:auto;margin-top:10px;border-top:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,0.06));padding-top:6px;scrollbar-width:none;-ms-overflow-style:none;scrollbar-color:transparent transparent;}
 .nico-m-lst::-webkit-scrollbar{display:none;}
 .nico-m-lst.show{display:block;}
-.nico-s-it{font-size:12px;padding:6px;cursor:pointer;border-radius:4px;color:#444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px;}
-.nico-s-it:hover{background:rgba(0,0,0,0.03);}
-.nico-s-it.on{color:#000;font-weight:700;background:rgba(0,0,0,0.04);}
+.nico-s-it{font-size:12px;padding:6px;cursor:pointer;border-radius:4px;color:var(--SmartThemeBodyColor,#444);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px;}
+.nico-s-it:hover{background:var(--SmartThemeChatTintColor,rgba(0,0,0,0.03));}
+.nico-s-it.on{color:var(--SmartThemeBodyColor,#000);font-weight:700;background:var(--SmartThemeChatTintColor,rgba(0,0,0,0.04));}
 .nico-s-it .nico-s-nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.nico-s-del{flex-shrink:0;font-size:13px;line-height:1;color:#bbb;cursor:pointer;padding:2px 5px;border-radius:4px;opacity:0;transition:opacity .2s,color .2s;background:none;border:none;}
+.nico-s-del{flex-shrink:0;font-size:13px;line-height:1;color:var(--SmartThemeBodyColor,#000);cursor:pointer;padding:2px 5px;border-radius:4px;opacity:0;transition:opacity .2s,color .2s;background:none;border:none;}
 .nico-s-it:hover .nico-s-del{opacity:1;}
 .nico-s-del:active{color:#EF4444;opacity:1;}
 @media(hover:none){.nico-s-del{opacity:.4;}}
-.nico-grd{display:flex;align-items:flex-start;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-ms-overflow-style:none;scrollbar-color:transparent transparent;-webkit-overflow-scrolling:touch;transform:translateZ(0);background:#fafafa;}
+.nico-grd{display:flex;align-items:flex-start;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-ms-overflow-style:none;scrollbar-color:transparent transparent;-webkit-overflow-scrolling:touch;transform:translateZ(0);background:var(--SmartThemeChatTintColor,#fafafa);}
 .nico-grd::-webkit-scrollbar{display:none;}
-.nico-g-rt{flex:0 0 100%;width:100%;position:relative;scroll-snap-align:center;background:#fafafa;overflow:hidden;}
+.nico-g-rt{flex:0 0 100%;width:100%;position:relative;scroll-snap-align:center;background:var(--SmartThemeChatTintColor,#fafafa);overflow:hidden;}
 .nico-gallery{margin:0 0 16px;flex-shrink:0;}
 .nico-gallery-hdr{display:flex;align-items:center;justify-content:space-between;padding:0 16px;margin-bottom:10px;}
-.nico-gallery-tit{font-size:13px;font-weight:700;color:#111;letter-spacing:0.5px;}
-.nico-gallery-add{background:#111;color:#fff;border:none;border-radius:12px;padding:5px 14px;font-size:11px;font-weight:700;letter-spacing:0.5px;cursor:pointer;transition:all .2s cubic-bezier(0.25,0.8,0.25,1);box-shadow:0 2px 6px rgba(0,0,0,0.15);}
+.nico-gallery-tit{font-size:13px;font-weight:700;color:var(--SmartThemeBodyColor,#111);letter-spacing:0.5px;}
+.nico-gallery-add{background:var(--SmartThemeBodyColor,#111);color:var(--SmartThemeBlurTintColor,#fff);border:none;border-radius:12px;padding:5px 14px;font-size:11px;font-weight:700;letter-spacing:0.5px;cursor:pointer;transition:all .2s cubic-bezier(0.25,0.8,0.25,1);}
 .nico-gallery-add:active{transform:scale(0.92);}
 .nico-gallery-roll{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-ms-overflow-style:none;scrollbar-color:transparent transparent;-webkit-overflow-scrolling:touch;transform:translateZ(0);}
 .nico-gallery-roll::-webkit-scrollbar{display:none;}
-.nico-gr-item{flex:0 0 100%;width:100%;scroll-snap-align:center;background:#fafafa;display:flex;flex-direction:column;align-items:center;}
-.nico-gr-item img{width:100%;height:auto;max-height:62vh;object-fit:contain;display:block;margin:0 auto;}
-.nico-gr-del{background:none;border:none;color:rgba(0,0,0,0.3);font-size:11px;letter-spacing:3px;cursor:pointer;padding:10px 16px 14px;display:flex;align-items:center;gap:5px;transition:color .2s,transform .2s;}
-.nico-gr-del:hover{color:#EF4444;}
+.nico-gr-item{flex:0 0 100%;width:100%;scroll-snap-align:center;background:var(--SmartThemeChatTintColor,#fafafa);display:flex;flex-direction:column;align-items:center;}
+.nico-gr-item img{width:100%;height:auto;display:block;margin:0 auto;}
+.nico-gr-del{background:none;border:none;color:var(--SmartThemeBodyColor,#000);opacity:.5;font-size:11px;letter-spacing:3px;cursor:pointer;padding:10px 16px 14px;display:flex;align-items:center;gap:5px;transition:color .2s,transform .2s,opacity .2s;}
+.nico-gr-del:hover{color:#EF4444;opacity:1;}
 .nico-gr-del:active{transform:scale(0.94);}
-.nico-gallery-empty{width:100%;font-size:12px;color:#aaa;text-align:center;padding:16px 0;border:1px dashed rgba(0,0,0,0.14);border-radius:10px;scroll-snap-align:center;}
+.nico-gallery-empty{width:100%;font-size:12px;color:var(--SmartThemeBodyColor,#000);opacity:.55;text-align:center;padding:16px 0;border:1px dashed var(--SmartThemeBorderColor,rgba(0,0,0,0.14));border-radius:10px;scroll-snap-align:center;}
 .nico-ed{cursor:pointer;border-bottom:1px dashed transparent;transition:border-color .2s;}
-.nico-ed:hover{border-color:rgba(0,0,0,0.25);}
-.nico-ed[contenteditable="true"]{outline:none;caret-color:#111;border-color:transparent;white-space:nowrap;max-width:96%;}
+.nico-ed:hover{border-color:var(--SmartThemeBorderColor,rgba(0,0,0,0.25));}
+.nico-ed[contenteditable="true"]{outline:none;caret-color:var(--SmartThemeBodyColor,#111);border-color:transparent;white-space:nowrap;max-width:96%;}
 .nico-av-bx[data-edit]{cursor:pointer;}
-.nico-toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%) translateY(8px);background:rgba(0,0,0,0.78);color:#fff;font-size:12px;padding:7px 16px;border-radius:18px;z-index:100000;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;}
+.nico-toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%) translateY(8px);background:var(--SmartThemeBlurTintColor,rgba(0,0,0,0.78));color:var(--SmartThemeBodyColor,#fff);font-size:12px;padding:7px 16px;border-radius:18px;z-index:100000;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;}
 .nico-toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 /* 弹幕歌词透明模块：固定在酒馆界面上层，透明只有歌词，可随意拖动 */
 .nico-lyric-mod{position:fixed;top:120px;left:50%;transform:translateX(-50%);z-index:11001;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;width:auto;max-width:92vw;}
 .nico-lyric-mod.hidden{display:none;}
-.nico-lyric-mod .nico-lyr-prev{font-size:12px;color:rgba(255,255,255,.5);margin-bottom:4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 4px rgba(0,0,0,.5);}
-.nico-lyric-mod .nico-lyr-cur{font-size:20px;font-weight:600;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.6),0 0 20px rgba(0,0,0,.3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;letter-spacing:1px;text-align:center;transition:color .2s;}
+.nico-lyric-mod .nico-lyr-prev{font-size:12px;color:var(--SmartThemeBodyColor,#fff);opacity:.55;margin-bottom:4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px rgba(0,0,0,.5);}
+.nico-lyric-mod .nico-lyr-cur{font-size:20px;font-weight:600;color:var(--SmartThemeBodyColor,#fff);text-shadow:0 1px 3px rgba(0,0,0,.55),0 0 8px rgba(0,0,0,.25);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;letter-spacing:1px;text-align:center;transition:color .2s;}
 .nico-lyric-mod .nico-lyr-cur.gradient{background:linear-gradient(90deg,#ff6b6b,#feca57,#48dbfb,#ff9ff3);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:none;}
 /* 弹幕设置面板（组件面板内） */
-.nico-danmu-set{margin:0 16px 16px;border:1px solid rgba(0,0,0,0.08);border-radius:12px;background:#fefefe;flex-shrink:0;overflow:hidden;}
-.nico-danmu-hd{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;cursor:pointer;font-size:13px;font-weight:600;color:#111;}
+.nico-danmu-set{margin:0 16px 16px;border:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,0.08));border-radius:12px;background:var(--SmartThemeChatTintColor,#fefefe);flex-shrink:0;overflow:hidden;}
+.nico-danmu-hd{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--SmartThemeBodyColor,#111);}
 .nico-danmu-ind{font-size:11px;color:#07c160;font-weight:700;letter-spacing:1px;}
-.nico-danmu-ind.off{color:#aaa;}
-.nico-danmu-body{display:none;padding:12px 14px;border-top:1px solid rgba(0,0,0,0.06);}
+.nico-danmu-ind.off{color:var(--SmartThemeBodyColor,#000);opacity:.5;}
+.nico-danmu-body{display:none;padding:12px 14px;border-top:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,0.06));}
 .nico-danmu-body.open{display:block;}
-.nico-danmu-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;color:#333;}
+.nico-danmu-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;color:var(--SmartThemeBodyColor,#333);}
 .nico-danmu-row>span:first-child{min-width:56px;}
-.nico-danmu-sw{width:36px;height:20px;border-radius:10px;background:#ccc;cursor:pointer;position:relative;flex-shrink:0;transition:background .2s;}
+.nico-danmu-sw{width:36px;height:20px;border-radius:10px;background:var(--SmartThemeBorderColor,#ccc);cursor:pointer;position:relative;flex-shrink:0;transition:background .2s;}
 .nico-danmu-sw.on{background:#07c160;}
-.nico-danmu-sw::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s;}
+.nico-danmu-sw::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--SmartThemeBlurTintColor,#fff);transition:left .15s;}
 .nico-danmu-sw.on::after{left:18px;}
-.nico-danmu-color{flex:1;padding:5px 8px;border:1px solid rgba(0,0,0,0.15);border-radius:6px;font-size:12px;outline:none;min-width:0;}
-.nico-danmu-range{flex:1;accent-color:#111;}
-.nico-danmu-v{font-size:11px;color:#888;min-width:34px;text-align:right;}
-.nico-danmu-reset{width:100%;margin-top:4px;padding:8px;border:1px solid rgba(0,0,0,0.12);border-radius:8px;background:#f5f5f7;cursor:pointer;font-size:12px;color:#333;}
-.nico-drg{height:36px;width:100%;display:flex;justify-content:center;align-items:center;cursor:pointer;background:#FFF;border-top:1px solid #fafafa;flex-shrink:0;padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:content-box;position:relative;z-index:5;}
-.nico-d-br{width:36px;height:4px;border-radius:4px;background:rgba(0,0,0,0.12);}
+.nico-danmu-color{flex:1;padding:5px 8px;border:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,0.15));border-radius:6px;font-size:12px;outline:none;min-width:0;background:var(--SmartThemeChatTintColor,transparent);color:var(--SmartThemeBodyColor,#333);}
+.nico-danmu-range{flex:1;accent-color:var(--SmartThemeBodyColor,#111);}
+.nico-danmu-v{font-size:11px;color:var(--SmartThemeBodyColor,#000);opacity:.55;min-width:34px;text-align:right;}
+.nico-danmu-reset{width:100%;margin-top:4px;padding:8px;border:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,0.12));border-radius:8px;background:var(--SmartThemeChatTintColor,#f5f5f7);cursor:pointer;font-size:12px;color:var(--SmartThemeBodyColor,#333);}
+.nico-drg{height:36px;width:100%;display:flex;justify-content:center;align-items:center;cursor:pointer;background:var(--SmartThemeBlurTintColor,#FFF);border-top:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,0.04));flex-shrink:0;padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:content-box;position:relative;z-index:5;}
+.nico-d-br{width:36px;height:4px;border-radius:4px;background:var(--SmartThemeBorderColor,rgba(0,0,0,0.12));}
+/* ===== 恢复初始配色：固定白底黑字，脱离酒馆主题变量 ===== */
+#Nico-Draw-Panel.nico-theme-reset{background:#ffffff!important;color:#111111!important;}
+#Nico-Draw-Panel.nico-theme-reset .nico-nav{border-bottom-color:#e5e5e5;}
+#Nico-Draw-Panel.nico-theme-reset .nico-av-in{background:#fafafa;border-color:#ffffff;}
+#Nico-Draw-Panel.nico-theme-reset .nico-st-l{color:#111111;opacity:.62;}
+#Nico-Draw-Panel.nico-theme-reset .nico-s-rng{border-color:#e5e5e5;background:#f5f5f7;}
+#Nico-Draw-Panel.nico-theme-reset .nico-s-in{background:#fafafa;}
+#Nico-Draw-Panel.nico-theme-reset .nico-s-nm{color:#111111;}
+#Nico-Draw-Panel.nico-theme-reset .nico-s-rl{color:#111111;opacity:.55;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-box{border-color:#eaeaea;background:#fefefe;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-fill{background:#111111;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-knob{background:#111111;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-pt{color:#111111;opacity:.55;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-src input{background:#f0f0f2;color:#222222;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-src input:focus{background:#e8e8eb;box-shadow:inset 0 0 0 1px #d8d8d8;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-src input::placeholder{color:#111111;opacity:.42;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-src button{background:#111111;color:#ffffff;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-tit{color:#111111;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-tmr{color:#111111;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-tmr input{background:#f0f0f2;color:#222222;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-tmr input:focus{background:#e8e8eb;box-shadow:inset 0 0 0 1px #d8d8d8;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-tmr button{background:#111111;color:#ffffff;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-res-it{border-bottom-color:#f0f0f0;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-res-name{color:#333333;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-res-add{border-color:#d8d8d8;color:#111111;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-res-add:active{background:#111111;color:#ffffff;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-res-add.added{background:#111111;color:#ffffff;border-color:#111111;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-ctr svg{fill:#222222;}
+#Nico-Draw-Panel.nico-theme-reset .nico-m-lst{border-top-color:#f0f0f0;}
+#Nico-Draw-Panel.nico-theme-reset .nico-s-it{color:#444444;}
+#Nico-Draw-Panel.nico-theme-reset .nico-s-it:hover{background:rgba(0,0,0,0.03);}
+#Nico-Draw-Panel.nico-theme-reset .nico-s-it.on{color:#000000;background:rgba(0,0,0,0.04);}
+#Nico-Draw-Panel.nico-theme-reset .nico-s-del{color:#000000;}
+#Nico-Draw-Panel.nico-theme-reset .nico-s-del:active{color:#EF4444;}
+#Nico-Draw-Panel.nico-theme-reset .nico-grd{background:#fafafa;}
+#Nico-Draw-Panel.nico-theme-reset .nico-g-rt{background:#fafafa;}
+#Nico-Draw-Panel.nico-theme-reset .nico-gallery-tit{color:#111111;}
+#Nico-Draw-Panel.nico-theme-reset .nico-gallery-add{background:#111111;color:#ffffff;}
+#Nico-Draw-Panel.nico-theme-reset .nico-gallery-roll{background:transparent;}
+#Nico-Draw-Panel.nico-theme-reset .nico-gr-item{background:#fafafa;}
+#Nico-Draw-Panel.nico-theme-reset .nico-gr-del{color:#000000;opacity:.5;}
+#Nico-Draw-Panel.nico-theme-reset .nico-gr-del:hover{color:#EF4444;opacity:1;}
+#Nico-Draw-Panel.nico-theme-reset .nico-gallery-empty{color:#000000;opacity:.55;border-color:#d8d8d8;}
+#Nico-Draw-Panel.nico-theme-reset .nico-ed:hover{border-color:rgba(0,0,0,0.25);}
+#Nico-Draw-Panel.nico-theme-reset .nico-ed[contenteditable="true"]{caret-color:#111111;}
+#Nico-Draw-Panel.nico-theme-reset .nico-toast{background:rgba(0,0,0,0.78);color:#ffffff;}
+#Nico-Draw-Panel.nico-theme-reset .nico-danmu-set{border-color:#eaeaea;background:#fefefe;}
+#Nico-Draw-Panel.nico-theme-reset .nico-danmu-hd{color:#111111;}
+#Nico-Draw-Panel.nico-theme-reset .nico-danmu-ind.off{color:#000000;opacity:.5;}
+#Nico-Draw-Panel.nico-theme-reset .nico-danmu-body{border-top-color:#f0f0f0;}
+#Nico-Draw-Panel.nico-theme-reset .nico-danmu-row{color:#333333;}
+#Nico-Draw-Panel.nico-theme-reset .nico-danmu-sw{background:#cccccc;}
+#Nico-Draw-Panel.nico-theme-reset .nico-danmu-color{border-color:#d8d8d8;background:transparent;color:#333333;}
+#Nico-Draw-Panel.nico-theme-reset .nico-danmu-range{accent-color:#111111;}
+#Nico-Draw-Panel.nico-theme-reset .nico-danmu-v{color:#000000;opacity:.55;}
+#Nico-Draw-Panel.nico-theme-reset .nico-danmu-reset{border-color:#d8d8d8;background:#f5f5f7;color:#333333;}
+#Nico-Draw-Panel.nico-theme-reset .nico-drg{background:#ffffff;border-top-color:#f0f0f0;}
+#Nico-Draw-Panel.nico-theme-reset .nico-d-br{background:#d8d8d8;}
+/* 主题切换按钮：导航栏右侧，高级简洁 */
+.nico-theme-btn{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:none;border-radius:8px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:.45;transition:opacity .2s,background .2s,transform .15s;padding:0;flex-shrink:0;}
+.nico-theme-btn:hover{opacity:.85;background:rgba(0,0,0,0.05);}
+.nico-theme-btn:active{transform:translateY(-50%) scale(0.9);}
+.nico-theme-btn svg{width:16px;height:16px;fill:currentColor;}
+#Nico-Draw-Panel.nico-theme-reset .nico-theme-btn{opacity:.7;}
+#Nico-Draw-Panel.nico-theme-reset .nico-theme-btn:hover{background:rgba(0,0,0,0.06);opacity:1;}
 `;
 
 /* ===== 1. 强力清除旧版注入与幽灵事件（扩展重载/对话多轮不叠加） ===== */
@@ -162,7 +239,7 @@ var panel=document.createElement('div');
 panel.id=PANEL_ID;
 panel.innerHTML=`
     <div class="nico-p-in">
-      <div class="nico-nav"><span class="nico-nav-txt" data-edit="navid" data-fs="16" title="点击编辑">@Nicole_id_here</span></div>
+      <div class="nico-nav"><span class="nico-nav-txt" data-edit="navid" data-fs="16" title="点击编辑">@Nicole_id_here</span><button class="nico-theme-btn" id="nico-theme-btn" type="button" title="恢复初始配色 / 跟随酒馆主题"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10c.55 0 1-.45 1-1 0-.39-.23-.73-.57-.88-.29-.13-.43-.46-.43-.78 0-.55.45-1 1-1H16c3.31 0 6-2.69 6-6 0-4.96-4.49-9-10-9zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 8 6.5 8 8 8.67 8 9.5 7.33 11 6.5 11zm3-4C8.67 7 8 6.33 8 5.5S8.67 4 9.5 4s1.5.67 1.5 1.5S10.33 7 9.5 7zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 4 14.5 4s1.5.67 1.5 1.5S15.33 7 14.5 7zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 8 17.5 8s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg></button></div>
       <div class="nico-hdr">
         <div class="nico-av-bx" data-edit="avatar" title="点击更换头像"><img class="nico-av-in" src="https://tuchuang.org.cn/imgs/2026/06/23/9469ffe03eb9e93a.png"></div>
         <div class="nico-stats">
@@ -197,6 +274,7 @@ panel.innerHTML=`
         <div class="nico-m-src">
           <input type="text" id="nico-mu-search-in" placeholder="搜歌名 / 歌手" autocomplete="off" />
           <button id="nico-mu-search-btn" type="button">搜</button>
+          <button id="nico-mu-pl-btn" type="button" title="导入网易云歌单（链接或ID）">歌单</button>
         </div>
         <div class="nico-m-res" id="nico-mu-res"></div>
         <div class="nico-m-ctr">
@@ -483,6 +561,25 @@ function muFetch(url,timeout){
     var c=new AbortController();var tm=setTimeout(function(){c.abort();},timeout||8000);
     return fetch(url,{signal:c.signal}).then(function(r){clearTimeout(tm);return r;}).catch(function(e){clearTimeout(tm);throw e;});
 }
+// JSONP 请求（script 标签注入，绕过 CORS 限制；带超时与全局回调清理）
+function muJSONP(url, cbParam, timeout){
+    return new Promise(function(res){
+        var cbName = '__nico_jsonp_' + Date.now() + '_' + Math.floor(Math.random()*1e6);
+        var done = false;
+        var script = document.createElement('script');
+        var timer = setTimeout(function(){ cleanup(); res(null); }, timeout||7000);
+        function cleanup(){
+            if(done) return; done = true;
+            clearTimeout(timer);
+            try{ delete window[cbName]; }catch(e){ window[cbName] = undefined; }
+            if(script && script.parentNode) script.parentNode.removeChild(script);
+        }
+        window[cbName] = function(data){ cleanup(); res(data); };
+        script.onerror = function(){ cleanup(); res(null); };
+        script.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + cbParam + '=' + cbName;
+        document.head.appendChild(script);
+    });
+}
 // 快速可播校验：只等 loadedmetadata（仅下载头部元数据），比 canplay 快
 function muCheckUrlFast(url){
     return new Promise(function(res){
@@ -584,11 +681,10 @@ function muResolveMulti(query){
     if(muSearchCache[cacheKey])return Promise.resolve(muSearchCache[cacheKey]);
     var engines=[
         {name:'网易云',fn:function(){return muSearchGD('netease',cleanQ);}},
-        {name:'QQ音乐',fn:function(){return muSearchGD('tencent',cleanQ);}},
-        {name:'酷狗',fn:function(){return muSearchGD('kugou',cleanQ);}},
+        {name:'QQ音乐',fn:function(){return muSearchQQ2(cleanQ);}},
+        {name:'酷狗',fn:function(){return muSearchKugou2(cleanQ);}},
         {name:'酷我',fn:function(){return muSearchGD('kuwo',cleanQ);}},
-        {name:'Joox',fn:function(){return muSearchGD('joox',cleanQ);}},
-        {name:'Qijieya',fn:function(){return muSearchQj(cleanQ);}}
+        {name:'Joox',fn:function(){return muSearchGD('joox',cleanQ);}}
     ];
     return new Promise(function(resolve){
         var results=[],finished=0,seen={};
@@ -617,15 +713,64 @@ async function muSearchGD(source,query){
         return await muRaceCheck(got,function(g){return {url:g.url,name:g.item.name,artist:g.item.artist||g.item.author||'',source:source,id:g.item.id};});
     }catch(e){}return null;
 }
-async function muSearchQj(query){
+/* ===== 4.6.2 QQ音乐/酷狗 官方搜索通道（JSONP 绕过 CORS） =====
+   这两个平台的官方接口无 CORS 头、且 vkey/getdata 直链在纯浏览器拿不到，
+   因此策略：用官方搜索接口拿到最佳候选（歌名+歌手），再换源到
+   gdstudio 的 netease/kuwo/joox 搜索同名可播歌曲来播放。
+   常见歌曲同名命中率高，相当于"QQ/酷狗作为搜歌入口，网易云系负责出音源"。 */
+function muQQSearchCandidates(query){
+    return muJSONP('https://c.y.qq.com/soso/fcgi-bin/client_search_cp?w='+encodeURIComponent(query)+'&format=jsonp&p=1&n=6&cr=1&g_tk=5381&loginUin=0&hostUin=0', 'jsonpCallback', 6500).then(function(d){
+        try{
+            var list=(d&&d.data&&d.data.song&&d.data.song.list)||[];
+            return list.map(function(s){
+                return {name:s.songname||'', artist:(s.singer||[]).map(function(x){return x.name||'';}).join(' / ')};
+            });
+        }catch(e){return [];}
+    });
+}
+function muKugouSearchCandidates(query){
+    return muJSONP('https://songsearch.kugou.com/song_search_v2?keyword='+encodeURIComponent(query)+'&page=1&pagesize=5&platform=WebFilter&userid=-1', 'callback', 6500).then(function(d){
+        try{
+            var list=(d&&d.data&&d.data.lists)||[];
+            return list.map(function(s){
+                return {name:s.SongName||'', artist:s.SingerName||''};
+            });
+        }catch(e){return [];}
+    });
+}
+// 用候选（歌名+歌手）去 gdstudio 换源搜可播歌曲
+async function muSearchByCandidates(cands, fallbackQ, tag){
+    if(!cands || !cands.length) return null;
+    for(var i=0; i<cands.length && i<3; i++){
+        var q = cands[i].name + (cands[i].artist ? ' ' + cands[i].artist : '');
+        for(var si=0; si<3; si++){
+            var src = ['netease','kuwo','joox'][si];
+            var hit = await muSearchGD(src, q);
+            if(hit) return hit;
+        }
+    }
+    // 兜底：直接用原关键词再试一遍网易云系
+    if(fallbackQ){
+        for(var si2=0; si2<3; si2++){
+            var hit2 = await muSearchGD(['netease','kuwo','joox'][si2], fallbackQ);
+            if(hit2) return hit2;
+        }
+    }
+    return null;
+}
+async function muSearchQQ2(query){
     try{
-        var sr=await muFetch('https://api.qijieya.cn/meting/?server=netease&type=search&name='+encodeURIComponent(query)).then(function(r){return r.json();});
-        if(!sr||!sr.length)return null;
-        var ranked=muRank(sr,query);
-        var list=ranked.slice(0,3).filter(function(x){return x&&x.url;}).map(function(x){return {url:x.url,item:x};});
-        if(!list.length)return null;
-        return await muRaceCheck(list,function(g){return {url:g.url,name:g.item.name,artist:g.item.artist||g.item.author||'',source:'qijieya',id:g.item.id||g.item.lrc_id};});
-    }catch(e){}return null;
+        var cands = await muQQSearchCandidates(query);
+        if(!cands.length) return null;
+        return await muSearchByCandidates(cands, query, 'tencent');
+    }catch(e){return null;}
+}
+async function muSearchKugou2(query){
+    try{
+        var cands = await muKugouSearchCandidates(query);
+        if(!cands.length) return null;
+        return await muSearchByCandidates(cands, query, 'kugou');
+    }catch(e){return null;}
 }
 
 var sIn = panel.querySelector('#nico-mu-search-in');
@@ -672,6 +817,57 @@ function doSearch(){
 }
 sBtn.onclick = doSearch;
 sIn.addEventListener('keydown', function(e){ if(e.key==='Enter'){ doSearch(); } });
+/* ===== 4.5.1 网易云歌单一键导入（gdstudio types=playlist，CORS 可用） ===== */
+function nicoExtractPlaylistId(input){
+    var s = String(input || '').trim();
+    var m = s.match(/playlist[\/=](\d+)/i) || s.match(/^[\?&]?id=(\d+)/) || s.match(/^(\d{6,15})$/);
+    return m ? m[1] : '';
+}
+async function nicoImportPlaylist(){
+    var input = prompt('输入网易云歌单链接或歌单ID：\n例如 https://music.163.com/#/playlist?id=3778678\n或直接 3778678');
+    if(input === null || input === '') return;
+    var pid = nicoExtractPlaylistId(input);
+    if(!pid){ nicoShowToast('无法识别歌单ID'); return; }
+    var plBtn = panel.querySelector('#nico-mu-pl-btn');
+    if(plBtn){ plBtn.disabled = true; plBtn.textContent = '…'; }
+    nicoShowToast('正在读取歌单...');
+    try{
+        var res = await muFetch(MUSIC_API + '?types=playlist&id=' + encodeURIComponent(pid), 10000).then(function(r){ return r.json(); });
+        var tracks = (res && res.playlist && res.playlist.tracks) || [];
+        if(!tracks.length){ nicoShowToast('歌单为空或读取失败'); return; }
+        nicoShowToast('歌单共 ' + tracks.length + ' 首，开始解析音源...');
+        var added = 0, existed = 0, failed = 0;
+        for(var i=0; i<tracks.length; i++){
+            var t = tracks[i];
+            var tName = t.name || '';
+            var tArtist = (t.ar || []).map(function(a){ return a.name || ''; }).join(' / ');
+            var dup = false;
+            for(var j=0; j<playlist.length; j++){
+                if(playlist[j].name === tName && (playlist[j].artist || '') === tArtist){ dup = true; break; }
+            }
+            if(dup){ existed++; continue; }
+            var got = null;
+            try{ got = await muSearchGD('netease', tName + ' ' + tArtist); }catch(e){}
+            if(got){
+                playlist.push({name: got.name, artist: got.artist || tArtist, url: got.url});
+                added++;
+            } else {
+                failed++;
+            }
+            if(i % 5 === 0 || i === tracks.length - 1){
+                nicoShowToast('导入中 ' + (i+1) + '/' + tracks.length + '（新增' + added + '，失败' + failed + '）');
+            }
+        }
+        nicoSavePlaylist();
+        buildList();
+        if(added){ cIdx = playlist.length - 1; loadP(); }
+        nicoShowToast('导入完成：新增 ' + added + ' 首' + (existed ? '，跳过重复 ' + existed : '') + (failed ? '，失败 ' + failed : ''));
+    }catch(e){
+        nicoShowToast('歌单导入失败');
+    }
+    if(plBtn){ plBtn.disabled = false; plBtn.textContent = '歌单'; }
+}
+panel.querySelector('#nico-mu-pl-btn').addEventListener('click', nicoImportPlaylist);
 var trId = null;
 var trBtn = panel.querySelector('#nico-mu-btn');
 var trIn = panel.querySelector('#nico-mu-in');
@@ -1204,6 +1400,23 @@ nicoProfileGet('quickpics').then(function(arr){
 var cBtn = panel.querySelector('#Nico-Draw-Close');
 cBtn.addEventListener('click', function(){ panel.classList.remove('is-open'); });
 cBtn.addEventListener('touchstart', function(e){ if(e.cancelable)e.preventDefault(); panel.classList.remove('is-open'); }, {passive:false});
+/* ===== 5.1 恢复初始配色 / 跟随酒馆主题切换（localStorage 持久化，纯 class 切换零开销） ===== */
+var themeBtn = panel.querySelector('#nico-theme-btn');
+var nicoThemeReset = (localStorage.getItem('nico-draw-theme-reset') || '0') === '1';
+function nicoApplyTheme(reset){
+    if(reset){ panel.classList.add('nico-theme-reset'); }
+    else{ panel.classList.remove('nico-theme-reset'); }
+}
+nicoApplyTheme(nicoThemeReset);
+if(themeBtn){
+    themeBtn.addEventListener('click', function(e){
+        e.stopPropagation();
+        nicoThemeReset = !nicoThemeReset;
+        localStorage.setItem('nico-draw-theme-reset', nicoThemeReset ? '1' : '0');
+        nicoApplyTheme(nicoThemeReset);
+        nicoShowToast(nicoThemeReset ? '已恢复初始配色' : '已跟随酒馆主题');
+    });
+}
 
 /* ===== 6. 页面卸载清理 ===== */
 window.addEventListener('beforeunload', function(){
