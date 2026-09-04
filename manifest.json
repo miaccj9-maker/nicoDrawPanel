@@ -1,0 +1,7 @@
+{
+    "display_name": "Nico Draw Panel",
+    "author": "nicole",
+    "description": "Qixian 系列角色抽屉面板（nico 前缀命名）：沉浸式交互，仅从页面顶部向下拉展开角色资料卡（头像/名称/身高/年龄/简介/高光相册）+ 音乐播放器（搜歌名/歌手搜歌、曲目列表/定时暂停/切歌）+ 图片墙，底部拖拽条收起。已移除全域文本阅读器（STORY ARCHIVE）与悬浮按钮。",
+    "version": "1.10.0",
+    "js": "nicoDrawPanel.js"
+}
