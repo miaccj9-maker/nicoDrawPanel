@@ -1,4 +1,4 @@
-/* Qixian Draw Panel (Nico Draw Panel) - SillyTavern Extension v1.10.7
+/* Qixian Draw Panel (Nico Draw Panel) - SillyTavern Extension v1.13.1
    角色抽屉面板：从屏幕顶部下拉展开角色资料卡 + 音乐播放器 + 图片库 + 弹幕歌词。
    所有样式类名 / ID / 全局变量统一使用 nico 前缀（nico-* / Nico-* / __nico_*），
    与 nicoPhone 系列组件保持命名一致，避免与其他扩展的旧前缀类名冲突。
@@ -22,11 +22,88 @@
      · 面板高度改为 height:100vh;height:100dvh（dvh 优先），修复移动端浏览器
        地址栏导致的底部被截断——底部横线收起按钮与图片删除按钮现在可见可点；
      · 纯 CSS 调整，零 JS 开销，不造成酒馆卡顿。
+   v1.10.8 搜索优化：
+     · 可播校验 800ms→3s，全灭后慢速复核(6s)，抗移动网络抖动；
+     · 失败结果不再永久缓存（10 分钟 TTL），空结果直接重搜；
+     · 全局结算 7s→12s，QQ 兜底串行改并行，最坏耗时大幅下降；
+     · 新增独立"歌手"搜索框，排序强制歌手匹配，避免搜到翻唱/错版本；
+     · 搜索/直链接口超时整体放宽（4s/4.5s→6s/6.5s）。
+   v1.10.9 搜索精准度再升级（对标 lyric-card 参考实现）：
+     · 新增独立音源引擎 Qijieya Meting API（netease 直链通道，搜索结果自带可播 url），
+       不依赖 gdstudio，即参考组件稳定性关键来源；同时接入 QQ/酷狗候选换源与慢速复核；
+     · 可播校验升级为"时长感知"：loadedmetadata 后校验真实时长，空轨/坏轨/占位短轨
+       直接判死；流式源时长未知时以 canplay 能否真正开播为准（比参考 duration>2 更稳）；
+     · 打分器精修：歌手支持多段归一（"A / B"任一命中即算），歌手字段缺失不再误罚，
+       歌名+歌手全等时绝对优先，杜绝翻唱/错版本抢位。
+   v1.10.10 精准度追平并反超参考实现（修复"谁先通过用谁"竞速缺陷）：
+     · 修复 muRaceCheck 关键缺陷：旧版并行校验"谁先通过用谁"，慢一点的正确音源
+       总被更快的翻唱/错版本抢位；新版"前置候选全部有结论才结算"——任何候选通过时，
+       只要还有比它更相关的候选在途，就等其出结果，慢但对永远压过快但错；
+     · 候选池 = 引擎原生第一候选 ∪ 打分前5，等同参考代码"信任原生排序"又保留打分覆盖；
+     · 搜索结果按全局相关度排序插入（引擎优先级×引擎内排名），第一个结果就是最准的，
+       不再按到达先后堆叠，弱引擎的翻唱版只会排后面；
+     · 可播校验与参考对齐：以 canplay 真正开播为准，过滤"元数据能读、数据拉不动"假源；
+     · netease 直链 iarc 优先（并行发起、iarc 结果优先），避免 gdstudio 偶尔返回同名错轨。
+   v1.11.0 搜索速度与稳定性再升级（实测接口存活度 + 对齐参考实现"先到先得"速度策略）：
+     · 实测确认 qijieya(Meting) 187ms、gdstudio ~1s 存活，qjqq/azhang/zygg/tmj 均不可用全部剔除；
+     · 新增 injahow Meting 直链通道（netease type=url 实测返回真实音频流），与 iarc/gdstudio
+       三路并行取直链，netease 可用性显著提升；
+     · 结算策略对齐参考实现"先到先得"：首个引擎返回可播结果立即结算上屏（原实现要等全部
+       引擎结束，最坏 12s+10s），命中耗时从"最慢引擎"变为"最快引擎"；后台继续收 2.5s
+       补充候选并写入缓存，兼顾速度与精准；
+     · 新增引擎健康度自适应：localStorage 记录各引擎成败/耗时，10 分钟内连挂 3 次的引擎
+       自动跳过，下次搜索不再等死链超时；搜索接口超时收紧（6s→4.5s，JSONP 6.5s→5s），
+       全灭兜底 12s→9s；
+     · 新搜索发起时立即中止上一轮全部在途请求（AbortController 注册表），连点搜索不再排队；
+     · qijieya 偶发返回 HTML 文档页已做非 JSON 防护，不会崩也不计入引擎失败；
+     · 播放容错：歌曲播放失败（死链/被限流）自动换源重搜一次，再失败自动切下一首，
+       歌单里不再出现"点了没声音"的死曲目。
+   v1.12.0 网易云歌单修复 + 歌曲持久化升级：
+     · 歌单链接识别修复：原正则只认 playlist/xxx 与裸 ID，标准分享链接
+       music.163.com/#/playlist?id=xxx 会识别失败（playlist 后跟的是 ?），
+       现已兼容 playlist?id= / playlist/ / ?id= / 裸 ID / 163cn.tv 短链
+       （自动跟随跳转还原真实链接）；
+     · 歌单读取双通道：gdstudio 为主，Meting playlist（injahow/qijieya）兜底，
+       响应结构多形态兼容；
+     · 导入改按网易云歌曲 ID 直链解析（持久 302 直链优先，iarc/gdstudio 兜底），
+       不再逐首按"歌名+歌手"搜索——更快更准、不会配错翻唱；8 路并行批量解析；
+     · 歌曲新增 sid/src 持久化字段：搜索添加/歌单导入的歌曲都记录原始 ID，
+       音源失效时优先按原 ID 精确重解析并自动续播，不再因直链过期集体失效。
+   v1.12.1 搜歌播放对齐 lyric-card 参考实现：
+     · 可播校验对齐参考严格标准：已知时长须 >2s 才入库，未知时长（流式/坏源）
+       直接判死——不再放行"元数据能读、数据拉不动"的假源，搜索/导入进歌单的
+       歌曲基本不会"点了没声音"；
+     · 歌词按歌曲 ID 精确拉取：优先 gdstudio lyric + qijieya lrc 双通道直拉，
+       不再"搜歌名→取第一条"（可能配错版本歌词）；失败才退回歌名搜索；
+     · 搜索结果点整条 = 添加并立即播放（对齐参考"搜到即听"），点"添加"按钮
+       仍只入库不打断当前播放；
+     · 搜索结果自动给全局相关度第一的版本打红色"推荐"徽标，帮你避开翻唱/错版本。
+   v1.13.0 完整版修复（对齐"一起听播放器"稳定策略并反超）：
+     · 可播校验不再"未知时长一刀切判死"：netease 302→CDN 分块流 duration 常为
+       Infinity/NaN（参考实现 Infinity>2 即放行，旧版却直接判死）——现改为
+       Infinity 放行、NaN 时观察 buffered/currentTime 确认数据在流动才通过；
+     · 歌单导入按歌曲 ID 多路取链（injahow/qijieya/iarc/gdstudio 四路并行实测），
+       全部实测时长后选"最长/最接近预期"的一条——完整版优先于 30-60s 试听版；
+     · 试听版检测与自动换源：实际时长明显短于预期（或无预期时 <=60s）判定试听，
+       播完自动全引擎找完整版并续播，不再无声循环试听片段；歌单条目新增"完"按钮
+       可随时强制换完整版；
+     · 歌单条目持久化预期时长（dt/duration/interval），供试听判定与换源比对；
+     · ID 解析全灭时不再直接跳歌，自动退回"歌名+歌手"全引擎搜索兜底；
+     · 找不到完整版时保留试听并明确提示，绝不静默失败。
+   v1.13.1 VIP 完整版强化（对齐"一起听卡片"的 VIP 播放能力并反超）：
+     · 参考组件能放 VIP 的关键 = iarc 通道（v.iarc.top 覆盖版权/VIP）+ 宽容校验；
+       本版把 iarc 提到与 gdstudio/injahow 三路并行实测、按完整性打分择优，
+       不再"谁先非空用谁"——iarc 完整版(流式/未知时长)不再被试听版抢位；
+     · 完整性打分修正：已验证可播的"流式未知时长"按完整版对待（试听 mp3 几乎
+       都有固定 30-60s 时长，完整版常是分块流 duration 未知），彻底避免
+       "iarc 完整版排最后、30s 试听反而上位"的反向选择；
+     · iarc 失败/空结果自动重试 1 次（400ms 退避），抗歌单批量导入时被限流；
+     · 导入并发 8→5，降低 iarc/meting 批量请求限流概率。
    已移除原组件中的"全域文本阅读器"(STORY ARCHIVE / MutationObserver 文本捕获)。
    所有 DOM 直接注入酒馆主页面，无 iframe 间接层。 */
 (function(){
 'use strict';
-try{console.log('%c[Nico-Draw-Panel] v1.10.6 已加载：文字清晰·防泛光·零卡顿','color:#818cf8;font-weight:bold');}catch(e){}
+try{console.log('%c[Nico-Draw-Panel] v1.13.1 已加载：VIP完整版优先·iarc三路择优·试听检测·搜索兜底','color:#818cf8;font-weight:bold');}catch(e){}
 
 var CSS_ID='Nico-Draw-Style', PANEL_ID='Nico-Draw-Panel';
 
@@ -73,6 +150,7 @@ var CSS = `
 .nico-m-src button{background:var(--SmartThemeBodyColor,#111);color:var(--SmartThemeBlurTintColor,#fff);border:none;border-radius:12px;padding:5px 14px;font-size:11px;font-weight:700;letter-spacing:0.5px;cursor:pointer;transition:all .2s cubic-bezier(0.25,0.8,0.25,1);flex-shrink:0;min-width:40px;}
 .nico-m-src button:active{transform:scale(0.92);}
 .nico-m-src button:disabled{opacity:.6;cursor:default;}
+.nico-m-src .nico-m-artist{flex:0 0 92px;min-width:0;}
 .nico-m-res{display:none;margin-bottom:10px;}
 .nico-m-res.show{display:block;}
 .nico-m-res-it{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 2px;border-bottom:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,0.05));}
@@ -80,6 +158,8 @@ var CSS = `
 .nico-m-res-add{background:none;border:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,0.18));border-radius:10px;padding:3px 12px;font-size:11px;color:var(--SmartThemeBodyColor,#111);cursor:pointer;flex-shrink:0;transition:all .2s;}
 .nico-m-res-add:active{transform:scale(0.92);background:var(--SmartThemeBodyColor,#111);color:var(--SmartThemeBlurTintColor,#fff);}
 .nico-m-res-add.added{background:var(--SmartThemeBodyColor,#111);color:var(--SmartThemeBlurTintColor,#fff);border-color:var(--SmartThemeBodyColor,#111);pointer-events:none;}
+/* v1.12.1：搜索结果"推荐"徽标（全局相关度第一） */
+.nico-m-res-badge{display:inline-block;margin-left:6px;font-size:9px;line-height:1.4;color:#fff;background:#EF4444;border-radius:4px;padding:1px 5px;vertical-align:middle;flex-shrink:0;}
 .nico-m-tit{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%;color:var(--SmartThemeBodyColor,#111);}
 .nico-m-tmr{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--SmartThemeBodyColor,#000);font-weight:500;}
 .nico-m-tmr input[type="number"]::-webkit-inner-spin-button,
@@ -104,6 +184,11 @@ var CSS = `
 .nico-s-it:hover .nico-s-del{opacity:1;}
 .nico-s-del:active{color:#EF4444;opacity:1;}
 @media(hover:none){.nico-s-del{opacity:.4;}}
+/* v1.13.0：歌单条目"完"按钮（换完整版，跳过试听） */
+.nico-s-full{flex-shrink:0;font-size:11px;line-height:1;color:var(--SmartThemeBodyColor,#000);cursor:pointer;padding:2px 6px;border-radius:4px;opacity:0;transition:opacity .2s,color .2s;background:none;border:none;}
+.nico-s-it:hover .nico-s-full{opacity:1;}
+.nico-s-full:active{color:#07c160;opacity:1;}
+@media(hover:none){.nico-s-full{opacity:.4;}}
 .nico-grd{display:flex;align-items:flex-start;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-ms-overflow-style:none;scrollbar-color:transparent transparent;-webkit-overflow-scrolling:touch;transform:translateZ(0);background:var(--SmartThemeChatTintColor,#fafafa);}
 .nico-grd::-webkit-scrollbar{display:none;}
 .nico-g-rt{flex:0 0 100%;width:100%;position:relative;scroll-snap-align:center;background:var(--SmartThemeChatTintColor,#fafafa);overflow:hidden;}
@@ -184,6 +269,7 @@ var CSS = `
 #Nico-Draw-Panel.nico-theme-reset .nico-s-it:hover{background:rgba(0,0,0,0.03);}
 #Nico-Draw-Panel.nico-theme-reset .nico-s-it.on{color:#000000;background:rgba(0,0,0,0.04);}
 #Nico-Draw-Panel.nico-theme-reset .nico-s-del{color:#000000;}
+#Nico-Draw-Panel.nico-theme-reset .nico-s-full{color:#000000;}
 #Nico-Draw-Panel.nico-theme-reset .nico-s-del:active{color:#EF4444;}
 #Nico-Draw-Panel.nico-theme-reset .nico-grd{background:#fafafa;}
 #Nico-Draw-Panel.nico-theme-reset .nico-g-rt{background:#fafafa;}
@@ -272,7 +358,8 @@ panel.innerHTML=`
           <span class="nico-m-pt" id="nico-mu-dur">0:00</span>
         </div>
         <div class="nico-m-src">
-          <input type="text" id="nico-mu-search-in" placeholder="搜歌名 / 歌手" autocomplete="off" />
+          <input type="text" id="nico-mu-search-in" placeholder="歌名" autocomplete="off" />
+          <input type="text" id="nico-mu-artist-in" class="nico-m-artist" placeholder="歌手" autocomplete="off" />
           <button id="nico-mu-search-btn" type="button">搜</button>
           <button id="nico-mu-pl-btn" type="button" title="导入网易云歌单（链接或ID）">歌单</button>
         </div>
@@ -404,13 +491,13 @@ var savedPl = null;
 try{ var _raw = localStorage.getItem('nico-playlist'); if(_raw) savedPl = JSON.parse(_raw); }catch(e){ savedPl = null; }
 var playlist = [];
 if(savedPl && savedPl.length){
-    for(var _si=0; _si<savedPl.length; _si++){ playlist.push({name: savedPl[_si].name || '', artist: savedPl[_si].artist || '', url: savedPl[_si].url || ''}); }
+    for(var _si=0; _si<savedPl.length; _si++){ playlist.push({name: savedPl[_si].name || '', artist: savedPl[_si].artist || '', url: savedPl[_si].url || '', sid: savedPl[_si].sid || '', src: savedPl[_si].src || '', dur: savedPl[_si].dur || 0}); }
 } else {
     for(var _pi=0; _pi<pl.length; _pi++){ playlist.push({name: pl[_pi].name, artist: '', url: pl[_pi].url}); }
 }
 function nicoSavePlaylist(){
     try{
-        localStorage.setItem('nico-playlist', JSON.stringify(playlist.map(function(s){ return {name:s.name, artist:s.artist||'', url:s.url}; })));
+        localStorage.setItem('nico-playlist', JSON.stringify(playlist.map(function(s){ return {name:s.name, artist:s.artist||'', url:s.url, sid:s.sid||'', src:s.src||'', dur:s.dur||0}; })));
     }catch(e){}
 }
 function removeTrack(idx){
@@ -446,11 +533,31 @@ function buildList(){
         d.appendChild(nm);
         var del = document.createElement('button'); del.type = 'button';
         del.className = 'nico-s-del'; del.textContent = '×'; del.title = '移除这首歌';
+        var fullBtn = document.createElement('button'); fullBtn.type = 'button';
+        fullBtn.className = 'nico-s-full'; fullBtn.textContent = '完'; fullBtn.title = '换完整版（跳过试听）';
         (function(idx){
             d.onclick = function(){ cIdx = idx; loadP(); pPlay(); };
             del.addEventListener('click', function(e){ e.stopPropagation(); removeTrack(idx); });
+            fullBtn.addEventListener('click', function(e){
+                e.stopPropagation();
+                var st = playlist[idx]; if(!st) return;
+                nicoShowToast('正在找完整版…');
+                nicoReResolve(st).then(function(fixed){
+                    if(fixed && fixed.url && fixed.url !== st.url){
+                        st.url = fixed.url; st.name = fixed.name || st.name; st.artist = fixed.artist || st.artist;
+                        st.sid = fixed.sid || st.sid; st.src = fixed.src || st.src; if(fixed.dur) st.dur = fixed.dur;
+                        nicoSavePlaylist(); buildList();
+                        if(idx === cIdx){ loadP(); if(!au.paused){ try{ pPlay(); }catch(e){} } }
+                        nicoShowToast(fixed.trial ? '未找到完整版，已换可播音源' : '已换为完整版');
+                    } else if(fixed && fixed.url === st.url){
+                        nicoShowToast('当前已是可播音源');
+                    } else {
+                        nicoShowToast('未找到替代音源');
+                    }
+                });
+            });
         })(i);
-        d.appendChild(del);
+        d.appendChild(fullBtn); d.appendChild(del);
         lDom.appendChild(d);
     }
 }
@@ -466,7 +573,9 @@ function uIcon(isP){
     iPlay.style.display = isP ? 'none':'block';
     iPause.style.display = isP ? 'block':'none';
 }
+var muPlayIntent = false; // v1.11.0：用户主动播放过才触发死链自动换源
 function pPlay(){
+    muPlayIntent = true;
     var p = au.play();
     if(p !== undefined) p.then(function(){ uIcon(true); }).catch(function(){ uIcon(false); });
 }
@@ -487,11 +596,85 @@ panel.querySelector('#nico-mu-list').onclick = function(){
     lDom.classList.toggle('show');
 };
 au.onended = function(){
+    var s = playlist[cIdx];
+    // v1.13.0 试听版检测：实际时长明显短于预期（或无预期时 <=60s）→ 先换完整版再继续，
+    // 不再无声循环 30-60s 试听片段。每首歌 3 分钟内只自动找一次，避免每次播完都重搜
+    if(s){
+        var realD = au.duration;
+        var expD = s.dur || 0;
+        var suspect = realD && isFinite(realD) && ((expD > 0 && realD < expD * 0.85) || (expD === 0 && realD <= 60));
+        if(suspect){
+            var tk = s.sid || (s.name + '|' + (s.artist||''));
+            var now = Date.now();
+            if(!nicoTrialCooldown[tk] || (now - nicoTrialCooldown[tk]) > 3 * 60 * 1000){
+                nicoTrialCooldown[tk] = now;
+                nicoShowToast('检测到试听版，正在找完整版…');
+                nicoReResolve(s).then(function(fixed){
+                    if(fixed && fixed.url && fixed.url !== s.url){
+                        var wasFull = !fixed.trial;
+                        s.url = fixed.url; s.name = fixed.name || s.name; s.artist = fixed.artist || s.artist;
+                        s.sid = fixed.sid || s.sid; s.src = fixed.src || s.src; if(fixed.dur) s.dur = fixed.dur;
+                        nicoSavePlaylist(); buildList(); loadP();
+                        try{ pPlay(); }catch(e){}
+                        nicoShowToast(wasFull ? '已换为完整版' : '未找到完整版，使用可播音源');
+                        return;
+                    }
+                    nicoPlayEndedNormal();
+                });
+                return;
+            }
+        }
+    }
+    nicoPlayEndedNormal();
+};
+// 正常播完后的切歌/循环逻辑（试听自动换源失败时也走这里）
+function nicoPlayEndedNormal(){
     if(playlist.length <= 1){ pPlay(); return; }
     if(playMode === 'loop'){ pPlay(); }
     else if(playMode === 'order'){ cIdx = (cIdx + 1) % playlist.length; loadP(); pPlay(); }
     else { cIdx = Math.floor(Math.random() * playlist.length); loadP(); pPlay(); }
-};
+}
+
+/* ===== v1.11.0 播放容错：死链自动换源重搜一次，再失败自动切下一首 ===== */
+var muPlayRetried = {};
+var nicoTrialCooldown = {}; // v1.13.0：试听版自动换源冷却（每曲 3 分钟一次）
+function muGotoNext(){
+    if(playlist.length <= 1){ try{ au.currentTime = 0; }catch(e){} return; }
+    cIdx = (cIdx + 1) % playlist.length; loadP(); pPlay();
+}
+au.addEventListener('error', function(){
+    var s = playlist[cIdx];
+    if(!s) return;
+    if(!muPlayIntent) return;                    // 未主动播放（页面加载/预载）不触发重搜
+    if(au.error && au.error.code === 1) return;  // MEDIA_ERR_ABORTED：用户主动中断
+    if(/(placeholder|track\s?\d{2})/i.test(s.name||'')) return; // 默认占位曲不重搜
+    var k = (s.name||'') + '|' + (s.url||'');
+    if(muPlayRetried[k]){
+        delete muPlayRetried[k];
+        muGotoNext(); // 已重试过仍失败 → 切下一首
+        return;
+    }
+    muPlayRetried[k] = true;
+    nicoShowToast('音源失效，正在重新解析…');
+    // v1.12.0：优先按原始歌曲 ID 精确重解析（sid/src 已随歌曲持久化），
+    // 不再盲目按"歌名+歌手"重搜而可能配到翻唱/错版本；修复后自动续播
+    nicoReResolve(s).then(function(fixed){
+        if(fixed){
+            s.url = fixed.url;
+            if(fixed.name) s.name = fixed.name;
+            if(fixed.artist) s.artist = fixed.artist;
+            if(fixed.sid) s.sid = fixed.sid;
+            if(fixed.src) s.src = fixed.src;
+            if(fixed.dur) s.dur = fixed.dur;
+            nicoSavePlaylist(); buildList();
+            loadP();
+            if(muPlayIntent){ try{ pPlay(); }catch(e){} } // 用户正在听，修复后自动续播
+            nicoShowToast('已切换到新音源');
+        }else{
+            muGotoNext();
+        }
+    });
+});
 
 /* ===== 4.4 歌曲进度条（时间显示 + 可拖动 seek） ===== */
 var barEl = panel.querySelector('#nico-mu-bar');
@@ -557,9 +740,16 @@ document.addEventListener('touchend', function(e){
 
 /* ===== 4.5 搜歌功能：输入歌名/歌手搜索并播放（多引擎兜底，移植自 nicoPhone） ===== */
 var MUSIC_API='https://music-api.gdstudio.xyz/api.php';
+/* 在途请求注册表：新搜索发起 / 结算完成时中止上一轮全部 fetch，
+   避免"连点搜索排队、慢引擎拖死会话"（v1.11.0）。
+   muSearchGen：搜索代数，中止/换代后不再把旧引擎的失败记入健康分 */
+var muActive=new Set();
+var muSearchGen=0;
+function muAbortAll(){ muSearchGen++; muActive.forEach(function(c){ try{c.abort();}catch(e){} }); muActive.clear(); }
 function muFetch(url,timeout){
     var c=new AbortController();var tm=setTimeout(function(){c.abort();},timeout||8000);
-    return fetch(url,{signal:c.signal}).then(function(r){clearTimeout(tm);return r;}).catch(function(e){clearTimeout(tm);throw e;});
+    muActive.add(c);
+    return fetch(url,{signal:c.signal}).then(function(r){clearTimeout(tm);muActive.delete(c);return r;}).catch(function(e){clearTimeout(tm);muActive.delete(c);throw e;});
 }
 // JSONP 请求（script 标签注入，绕过 CORS 限制；带超时与全局回调清理）
 function muJSONP(url, cbParam, timeout){
@@ -580,30 +770,81 @@ function muJSONP(url, cbParam, timeout){
         document.head.appendChild(script);
     });
 }
-// 快速可播校验：只等 loadedmetadata（仅下载头部元数据），比 canplay 快
-function muCheckUrlFast(url){
+// 可播校验 v1.13.0：以 canplay（真正能开播）为准并校验真实时长。
+// 对齐"一起听播放器"参考实现的宽容度并反超：参考实现 Infinity>2 即放行、NaN 判死，
+// 旧版"未知时长一刀切判死"会误杀 netease 302→CDN 分块流（duration 常为 Infinity/NaN），
+// 这正是"歌单导入的歌播不了/只剩试听"的根因之一。现规则：
+//   · 已知时长 >2s → 可播（坏轨 <=0.5s 提前判死）；
+//   · Infinity（流式）→ 可播，并返回 dur=0 表示时长未知；
+//   · NaN（分块传输未解析完）→ 轮询观察 buffered/currentTime，确认数据在流动才通过。
+function muCheckUrlFast(url,timeout){
+    return muProbeUrlFull(url,timeout).then(function(r){ return !!(r&&r.ok); });
+}
+// 完整探测：返回 {ok, dur}，供导入/换源做"时长择优"（完整版优先于试听版）
+function muProbeUrlFull(url,timeout){
     return new Promise(function(res){
-        if(!url)return res(false);
-        var t=new Audio();t.preload='metadata';t.muted=true;
-        var done=false;
-        var finish=function(v){if(done)return;done=true;clearTimeout(tm);try{t.onloadedmetadata=t.onerror=null;t.src='';}catch(e){}res(v);};
-        var tm=setTimeout(function(){finish(false);},800);
-        t.onloadedmetadata=function(){finish(true);};t.onerror=function(){finish(false);};
-        try{t.src=url;}catch(e){finish(false);}
+        if(!url)return res({ok:false,dur:0});
+        var t=new Audio();t.preload='auto';t.muted=true;
+        var done=false,dur=0,hasData=false,tm=null,advT=null;
+        var finish=function(v){if(done)return;done=true;clearTimeout(tm);clearInterval(advT);
+            try{t.onloadedmetadata=t.onerror=t.oncanplay=t.onprogress=t.ontimeupdate=null;t.src='';if(t.load)t.load();}catch(e){}
+            res(v);};
+        tm=setTimeout(function(){finish({ok:!!(hasData&&(dur>2||dur===0)),dur:dur});},timeout||4000);
+        // 时长未知时的数据流动观察（分块流 NaN / Infinity 都靠它兜底）
+        advT=setInterval(function(){
+            var d=t.duration;
+            if(d&&isFinite(d)&&d>2){dur=d;finish({ok:true,dur:d});}
+            if(t.buffered&&t.buffered.length)hasData=true;
+            if(t.currentTime>0.2)hasData=true;
+            if(hasData&&t.readyState>=3&&t.buffered&&t.buffered.length)finish({ok:true,dur:isFinite(t.duration)?t.duration:dur});
+        },250);
+        t.onloadedmetadata=function(){
+            var d=t.duration;
+            if(d&&isFinite(d)&&d<=0.5)finish({ok:false,dur:0}); // 明显坏轨提前判死
+            else if(d&&isFinite(d))dur=d;
+        };
+        t.oncanplay=function(){
+            var d=t.duration;
+            if(d&&isFinite(d)){dur=d;finish({ok:d>2,dur:d});}
+            else{hasData=true;} // 未知时长：交给轮询确认真实数据在流动
+        };
+        t.onprogress=function(){ if(t.buffered&&t.buffered.length){hasData=true;var d=t.duration;if(d&&isFinite(d))dur=d;} };
+        t.ontimeupdate=function(){ if(t.currentTime>0){hasData=true;var d=t.duration;if(d&&isFinite(d))dur=d;} };
+        t.onerror=function(){finish({ok:false,dur:0});};
+        try{
+            t.src=url;
+            // 静音预播：强制真实加载，流式源也能推进 currentTime/buffered
+            var pp=t.play(); if(pp&&pp.catch)pp.catch(function(){});
+        }catch(e){finish({ok:false,dur:0});}
     });
 }
 // 网易云直链解析（v.iarc.top，版权/VIP覆盖强）
+// v1.13.1：失败/空结果自动重试 1 次（400ms 退避），抗批量导入时被限流
 function muIarcUrl(id){
     return new Promise(function(res){
-        muFetch('https://v.iarc.top/?type=url&id='+id,4000).then(function(rr){
-            if(!rr||!rr.ok)return res('');
-            var ct=rr.headers.get('content-type')||'';
-            if(rr.url&&rr.url.indexOf('iarc.top')<0&&!ct.includes('json')&&!ct.includes('html'))return res(rr.url);
-            rr.json().then(function(jr){
-                res((Array.isArray(jr)&&jr[0])?(jr[0].url||''):(jr&&(jr.url||(jr.data&&jr.data.url))||''));
-            }).catch(function(){res('');});
-        }).catch(function(){res('');});
+        var tries = 0;
+        function attempt(){
+            tries++;
+            muFetch('https://v.iarc.top/?type=url&id='+id,6000).then(function(rr){
+                if(!rr||!rr.ok){ if(tries<2){ setTimeout(attempt,400); return; } return res(''); }
+                var ct=rr.headers.get('content-type')||'';
+                if(rr.url&&rr.url.indexOf('iarc.top')<0&&!ct.includes('json')&&!ct.includes('html'))return res(rr.url);
+                rr.json().then(function(jr){
+                    var u=(Array.isArray(jr)&&jr[0])?(jr[0].url||''):(jr&&(jr.url||(jr.data&&jr.data.url))||'');
+                    if(u)res(u); else if(tries<2){ setTimeout(attempt,400); } else res('');
+                }).catch(function(){ if(tries<2){ setTimeout(attempt,400); } else res(''); });
+            }).catch(function(){ if(tries<2){ setTimeout(attempt,400); } else res(''); });
+        }
+        attempt();
     });
+}
+// 时长完整性打分（v1.13.1）：已验证可播的"流式未知时长"按完整版对待——
+// 试听版 mp3 几乎都有固定 30-60s 时长，而 VIP 完整版（iarc）常是分块流、duration 未知
+function muDurScore(d){
+    if(!d || !isFinite(d)) return 2;   // 流式未知时长：已确认数据在流动 → 视为完整版
+    if(d > 60) return 2;               // 明确完整
+    if(d > 30) return 1;               // 疑似试听
+    return 0;
 }
 // 多个直链Promise并行竞速：谁先返回非空用谁
 function muFirstUrl(promises){
@@ -617,14 +858,31 @@ function muFirstUrl(promises){
 async function muGdItemUrl(source,item){
     var finalUrl='';
     if(source==='netease'){
-        var gdP=muFetch(MUSIC_API+'?types=url&source=netease&id='+item.id+'&br=320',4000)
+        // v1.13.1 VIP 完整版优先（对齐参考组件"iarc 覆盖 VIP"并反超）：
+        // iarc（版权/VIP覆盖强）+ gdstudio + injahow 302 三路并行实测，
+        // 全部可播结果按完整性打分取最优——不再"谁先非空用谁"，
+        // 避免 iarc 完整版(流式/未知时长)被更快的 gdstudio 试听版抢位
+        var gdP=muFetch(MUSIC_API+'?types=url&source=netease&id='+item.id+'&br=320',6000)
             .then(function(r){return r.json();})
             .then(function(j){return (j&&j.url)||'';})
             .catch(function(){return '';});
-        finalUrl=await muFirstUrl([muIarcUrl(item.id),gdP]);
+        var iu=await muIarcUrl(item.id), gu=await gdP;
+        var candUrls=[iu,gu,'https://api.injahow.cn/meting/?server=netease&type=url&id='+encodeURIComponent(item.id)];
+        var probes=await Promise.all(candUrls.map(function(u){
+            if(!u)return Promise.resolve(null);
+            return muProbeUrlFull(u,4500).then(function(r){return r&&r.ok?{url:u,dur:r.dur}:null;}).catch(function(){return null;});
+        }));
+        var okList=probes.filter(Boolean);
+        if(okList.length){
+            okList.sort(function(a,b){
+                var sa=muDurScore(a.dur), sb=muDurScore(b.dur);
+                return sb-sa || ((b.dur||0)-(a.dur||0));
+            });
+            finalUrl=okList[0].url;
+        }
     }else{
         try{
-            var ur=await muFetch(MUSIC_API+'?types=url&source='+source+'&id='+item.id+'&br=320',4500).then(function(r){return r.json();});
+            var ur=await muFetch(MUSIC_API+'?types=url&source='+source+'&id='+item.id+'&br=320',6500).then(function(r){return r.json();});
             if(ur&&ur.url)finalUrl=ur.url;
         }catch(e){}
     }
@@ -632,14 +890,30 @@ async function muGdItemUrl(source,item){
     return finalUrl?{url:finalUrl,item:item}:null;
 }
 // 候选相关度排序：歌名/歌手多词包含匹配累计加分，翻唱/伴奏/Live/remix 降权
-function muRank(items,query){
-    var q=(query||'').toLowerCase().trim();
+// v1.10.9 精修：歌手支持多段归一（"A / B"任一命中即算）；歌手字段缺失不再误罚；
+// 歌名+歌手完全匹配额外加权，保证"精准命中"永远排在最前
+function muRank(items,query,artist){
+    // 常见繁→简映射：Joox 等源返回繁体歌手名，统一后比对更准
+    var T2S={'傑':'杰','倫':'伦','劉':'刘','陳':'陈','張':'张','孫':'孙','楊':'杨','鄧':'邓','蘇':'苏','鄒':'邹','黃':'黄','吳':'吴','鄭':'郑','許':'许','謝':'谢','韓':'韩','馮':'冯','趙':'赵','蔣':'蒋','蕭':'萧','葉':'叶','羅':'罗','項':'项','鍾':'钟','鐘':'钟','譚':'谭','馬':'马','陸':'陆','萬':'万','賴':'赖','範':'范','龍':'龙','鳳':'凤','愛':'爱','國':'国','學':'学','樂':'乐','單':'单','雙':'双','東':'东','華':'华','麗':'丽','兒':'儿'};
+    function norm(s){return String(s||'').toLowerCase().split('').map(function(c){return T2S[c]||c;}).join('');}
+    var q=norm(query);
     var parts=q.split(/\s+/).filter(Boolean);
-    function artOf(it){return String(it.artist||it.author||'').toLowerCase();}
+    var wantArt=norm(artist);
+    function artOf(it){return norm(it.artist||it.author||'');}
+    // 歌手多段拆解：支持 "歌手A / 歌手B"、"A、B" 等形式，任一命中即算歌手命中
+    function artTokens(a){return String(a||'').split(/[\/、,&，,\s]+/).filter(Boolean);}
     return items.map(function(it,idx){
-        var name=(it.name||'').toLowerCase(),score=0;
+        var name=norm(it.name||''),score=0;
         var bare=name.replace(/[（(].*?[)）]/g,'').trim();
         var art=artOf(it);
+        // 歌手匹配：命中大幅加分；有歌手信息但完全不匹配才降权（防翻唱/错版本）；
+        // 歌手字段缺失（部分源不返回）不做惩罚，避免把正确答案压下去
+        if(wantArt){
+            var artParts=artTokens(wantArt),artHit=false;
+            for(var ai=0;ai<artParts.length;ai++){ if(art.indexOf(artParts[ai])>=0){artHit=true;break;} }
+            if(artHit){ score+=60; if(art===wantArt)score+=25; }
+            else if(art){ score-=35; }
+        }
         if(parts.length>1){
             var nHitW={},aHitW={};
             for(var i=0;i<parts.length;i++){if(bare.indexOf(parts[i])>=0)nHitW[i]=1;if(art.indexOf(parts[i])>=0)aHitW[i]=1;}
@@ -651,67 +925,262 @@ function muRank(items,query){
         }else{
             if(name===q)score+=100; else if(bare===q)score+=85; else if(bare.indexOf(q)>=0)score+=40;
         }
+        // 歌名（去括号后）+ 歌手全等：绝对优先，等同官方原版
+        if(bare===q&&(!wantArt||art===wantArt))score+=120;
         if(!/[（(].*?[)）]/.test(it.name||''))score+=8;
         if(/翻唱|伴奏|[Ll]ive|现场|remix|钢琴|纯音乐/.test(it.name||''))score-=30;
         return {it:it,score:score,idx:idx};
     }).sort(function(a,b){return b.score-a.score||a.idx-b.idx;}).map(function(x){return x.it;});
 }
-// 多个候选直链并行竞速校验，第一个可播的立即返回
-function muRaceCheck(list,mkHit){
+// 多候选直链并行校验 + 相关度优先：任一候选有结论就尝试结算，
+// 但只有"比它更靠前的候选全部有结论"才允许选中它——
+// 快但错（低相关度）的版本永远抢不了慢但对（高相关度）的位；全部失败才返回 null。
+// 这是本组件 vs 参考代码"精准度差距"的核心修复：旧版谁先通过用谁，慢一点的正确音源总被抢。
+function muRaceCheck(list,mkHit,timeout){
     return new Promise(function(resolve){
-        var settled=false,finished=0,total=list.length;
+        var total=list.length;
         if(!total)return resolve(null);
-        list.forEach(function(g){
-            muCheckUrlFast(g.url).then(function(ok){
-                if(!settled&&ok){settled=true;resolve(mkHit(g));}
-            }).catch(function(){}).finally(function(){
-                finished++;
-                if(finished===total&&!settled)resolve(null);
+        var done=0,resolved=false,state=[];
+        function settle(){
+            if(resolved)return;
+            for(var i=0;i<list.length;i++){
+                if(state[i]===undefined)break;         // 更高优先候选仍在校验 → 暂不结算
+                if(state[i]===true){ resolved=true; resolve(mkHit(list[i])); return; }
+            }
+            if(done===total){ resolved=true; resolve(null); }
+        }
+        list.forEach(function(g,idx){
+            muCheckUrlFast(g.url,timeout).then(function(ok){
+                state[idx]=!!ok;
+            }).catch(function(){
+                state[idx]=false;
+            }).finally(function(){
+                done++;
+                settle();
             });
         });
     });
 }
 function muCleanQuery(q){return q.replace(/\([^)]*\)/g,'').replace(/\[.*?\]/g,'').replace(/[^\w\u4e00-\u9fa5\s.-]/g,'').trim();}
 var muSearchCache={};
-// 多引擎并行收集可播结果，返回结果数组（不去重不自动进歌单）
-function muResolveMulti(query){
-    var cleanQ=muCleanQuery(query);
-    if(!cleanQ)cleanQ=query;
-    var cacheKey=cleanQ.toLowerCase();
-    if(muSearchCache[cacheKey])return Promise.resolve(muSearchCache[cacheKey]);
-    var engines=[
-        {name:'网易云',fn:function(){return muSearchGD('netease',cleanQ);}},
-        {name:'QQ音乐',fn:function(){return muSearchQQ2(cleanQ);}},
-        {name:'酷狗',fn:function(){return muSearchKugou2(cleanQ);}},
-        {name:'酷我',fn:function(){return muSearchGD('kuwo',cleanQ);}},
-        {name:'Joox',fn:function(){return muSearchGD('joox',cleanQ);}}
-    ];
-    return new Promise(function(resolve){
-        var results=[],finished=0,seen={};
-        function settle(){
-            muSearchCache[cacheKey]=results;
-            resolve(results.slice());
-        }
-        engines.forEach(function(eng){
-            eng.fn().then(function(hit){
-                if(hit&&hit.url&&!seen[hit.url]){seen[hit.url]=1;results.push(hit);}
-            }).catch(function(){}).finally(function(){
-                finished++;
-                if(finished===engines.length)settle();
-            });
+var MU_CACHE_TTL=10*60*1000;   // 搜索结果缓存 10 分钟
+var MU_CACHE_MAX=200;          // 缓存条目上限
+function muCacheGet(key){
+    var e=muSearchCache[key];
+    if(e&&e.hits&&e.hits.length&&(Date.now()-e.t)<MU_CACHE_TTL)return e.hits;
+    return null;
+}
+function muCacheSet(key,hits){
+    if(!hits||!hits.length)return; // 空结果不缓存，避免把瞬时失败永久固化
+    muSearchCache[key]={t:Date.now(),hits:hits};
+    var ks=Object.keys(muSearchCache);
+    if(ks.length>MU_CACHE_MAX)delete muSearchCache[ks[0]];
+}
+/* ===== v1.11.0 引擎健康度自适应：成败/耗时写入 localStorage，
+   10 分钟内连挂 3 次的引擎自动跳过；qijieya 等偶发抽风源不再拖慢每次搜索 ===== */
+var MU_HEALTH_KEY='nico-mu-health-v1';
+function muHealthLoad(){ try{ var h=JSON.parse(localStorage.getItem(MU_HEALTH_KEY)); return h&&typeof h==='object'?h:{}; }catch(e){ return {}; } }
+function muHealthSave(h){ try{ localStorage.setItem(MU_HEALTH_KEY,JSON.stringify(h)); }catch(e){} }
+function muHealthMark(name,ok,ms){
+    var h=muHealthLoad(),e=h[name]||{fail:0,last:0,lat:0};
+    if(ok){ e.fail=0; e.last=Date.now(); e.lat=Math.round((e.lat*3+(ms||0))/4); }
+    else{ e.fail=(e.fail||0)+1; e.last=Date.now(); }
+    h[name]=e; muHealthSave(h);
+}
+function muHealthIsBad(name){
+    var e=muHealthLoad()[name];
+    if(!e||!e.fail)return false;
+    if(e.fail>=3&&(Date.now()-e.last)<10*60*1000)return true;
+    return false;
+}
+function muTimedEngine(name,fn){
+    return function(){
+        var t0=Date.now(),gen=muSearchGen;
+        return fn().then(function(h){
+            if(gen===muSearchGen)muHealthMark(name,!!(h&&h.url),Date.now()-t0); // 已被换代中止不计分
+            return h;
+        }).catch(function(e){
+            if(gen===muSearchGen&&(!e||e.name!=='AbortError'))muHealthMark(name,false,Date.now()-t0);
+            throw e;
         });
-        setTimeout(function(){ if(finished<engines.length){settle();} },7000);
+    };
+}
+// 快速路径全军覆没后的慢速复核：用更长校验超时重试主力源，抗移动网络抖动
+function muConfirmSlow(cleanQ,artist){
+    return new Promise(function(res){
+        var fns=[function(){return muSearchGD('netease',cleanQ,artist,6000);},
+                 function(){return muSearchGD('kuwo',cleanQ,artist,6000);},
+                 function(){return muSearchQijieya(cleanQ,artist);}];
+        var got=null,done=0;
+        fns.forEach(function(f){
+            f().then(function(h){ if(h&&h.url&&!got)got=h; }).catch(function(){})
+             .finally(function(){ done++; if(done===fns.length)res(got); });
+        });
+        setTimeout(function(){res(got);},10000);
     });
 }
-async function muSearchGD(source,query){
+// 多引擎并行收集可播结果，返回结果数组（不去重不自动进歌单）
+function muResolveMulti(query,artist,onProgress){
+    var cleanQ=muCleanQuery(query);
+    if(!cleanQ)cleanQ=query;
+    var wantArt=(artist||'').trim();
+    var cacheKey=(cleanQ+'|'+wantArt).toLowerCase();
+    var cached=muCacheGet(cacheKey);
+    if(cached){
+        if(onProgress)cached.forEach(function(h,idx){setTimeout(function(){onProgress(h,idx+1,cached.length,null,true);},idx*25);});
+        return Promise.resolve(cached.slice());
+    }
+    // base 越小优先级越高（对齐参考代码"网易云优先"的策略），结果按 pri 排序展示；
+    // v1.11.0：带 key 的引擎参与健康度自适应，故障引擎直接跳过
+    var enginesBase=[
+        {name:'网易云',key:'gd-netease',base:0,fn:function(){return muSearchGD('netease',cleanQ,wantArt);}},
+        {name:'QQ音乐',key:'qq',base:1,fn:function(){return muSearchQQFull(cleanQ,wantArt);}},
+        {name:'酷狗',key:'kugou',base:2,fn:function(){return muSearchKugou2(cleanQ,wantArt);}},
+        {name:'酷我',key:'gd-kuwo',base:3,fn:function(){return muSearchGD('kuwo',cleanQ,wantArt);}},
+        {name:'Meting',key:'qijieya',base:4,fn:function(){return muSearchQijieya(cleanQ,wantArt);}},
+        {name:'Joox',key:'gd-joox',base:5,fn:function(){return muSearchGD('joox',cleanQ,wantArt);}}
+    ];
+    var engines=[];
+    enginesBase.forEach(function(e){ if(!muHealthIsBad(e.key)) engines.push({name:e.name,base:e.base,fn:muTimedEngine(e.key,e.fn)}); });
+    if(!engines.length){ engines=enginesBase.map(function(e){ return {name:e.name,base:e.base,fn:muTimedEngine(e.key,e.fn)}; }); } // 全挂也再试一次（可能已恢复）
+    return new Promise(function(resolve){
+        var results=[],finished=0,seen={},settled=false,graceTimer=null;
+        function cacheNow(){ if(results.length){ muCacheSet(cacheKey,results.slice()); } }
+        function settle(){
+            if(settled)return; settled=true;
+            if(graceTimer)clearTimeout(graceTimer);
+            if(results.length){
+                // v1.11.0 先到先得：首个引擎命中立即上屏（对齐参考实现速度），
+                // 后台再收 2.5s 补充候选充实缓存，期间结果仍渐进追加到列表
+                resolve(results.slice());
+                graceTimer=setTimeout(function(){
+                    cacheNow();
+                    muAbortAll(); // 结算完成，中止其余在途搜索请求
+                    if(onProgress)onProgress(null,results.length,engines.length,null,true);
+                },2500);
+                return;
+            }
+            // 全部引擎快检未命中 → 慢速复核，避免网络抖动误判"未找到"
+            muConfirmSlow(cleanQ,wantArt).then(function(h2){
+                if(h2&&!seen[h2.url]){ seen[h2.url]=1; results.push(h2); if(onProgress)onProgress(h2,1,1,null,true); }
+                cacheNow(); muAbortAll();
+                resolve(results.slice());
+            });
+        }
+        function pushHit(eng,hit){
+            if(hit&&hit.url&&!seen[hit.url]){
+                seen[hit.url]=1;
+                if(hit.pri===undefined)hit.pri=0;
+                hit.pri=eng.base*100+(hit.pri||0); // 全局相关度：引擎优先级 × 引擎内排名
+                results.push(hit);
+                if(onProgress)onProgress(hit,results.length,engines.length);
+                if(!settled)settle();
+            }
+        }
+        engines.forEach(function(eng){
+            eng.fn().then(function(hit){ if(hit)pushHit(eng,hit); })
+                .catch(function(){})
+                .finally(function(){
+                    finished++;
+                    if(finished===engines.length&&!settled)settle();
+                });
+        });
+        setTimeout(function(){ if(!settled)settle(); },9000); // 全局兜底（原 12s → 9s）
+    });
+}
+// 渲染单条搜索结果到列表（供渐进追加复用）
+function appendSearchResult(hit){
+    var art=Array.isArray(hit.artist)?hit.artist.join(' / '):(hit.artist||'');
+    var label=hit.name+(art?' - '+art:'');
+    var it=document.createElement('div');it.className='nico-m-res-it';
+    var nm=document.createElement('span');nm.className='nico-m-res-name';
+    nm.textContent=label;nm.title=label;
+    var add=document.createElement('button');add.type='button';
+    add.className='nico-m-res-add';add.textContent='添加';
+    // v1.12.1：点"添加"只入库；点整条结果 = 添加并立即播放（对齐参考实现"搜到即听"）
+    function doAdd(autoplay){
+        // 一并记录 sid/src，后续音源失效可精确按原 ID 重解析
+        playlist.unshift({name:hit.name,artist:art,url:hit.url,sid:hit.id||'',src:hit.source||'',dur:0});
+        buildList();cIdx=0;
+        nicoSavePlaylist();
+        add.className='nico-m-res-add added';add.textContent='已添加';
+        if(autoplay){ loadP(); try{ pPlay(); }catch(e){} nicoShowToast('已添加并播放'); }
+        else{ nicoShowToast('已添加到歌单'); }
+    }
+    add.onclick=function(){ doAdd(false); };
+    it.onclick=function(){ doAdd(true); };
+    it.appendChild(nm);it.appendChild(add);
+    // 按相关度 pri 排序插入：越靠前越精准（引擎优先级 + 引擎内排名），
+    // 保证第一个可见结果就是最可能正确的版本，不再按到达先后堆叠
+    it._pri = hit.pri||0;
+    var kids=resDom.children, inserted=false;
+    for(var ki=0;ki<kids.length;ki++){
+        var kp=(kids[ki]._pri===undefined)?Infinity:kids[ki]._pri;
+        if(it._pri<kp){ resDom.insertBefore(it,kids[ki]); inserted=true; break; }
+    }
+    if(!inserted)resDom.appendChild(it);
+    // v1.12.1：给全局相关度第一的结果打"推荐"徽标，帮助避开翻唱/错版本
+    var its=resDom.children;
+    for(var bi=0; bi<its.length; bi++){
+        var oldBadge=its[bi].querySelector('.nico-m-res-badge');
+        if(oldBadge)oldBadge.remove();
+        if(bi===0){
+            var b=document.createElement('span');
+            b.className='nico-m-res-badge';
+            b.textContent='推荐';
+            b.title='全局相关度最高的版本';
+            var nmEl=its[bi].querySelector('.nico-m-res-name');
+            if(nmEl)nmEl.appendChild(b);
+        }
+    }
+}
+async function muSearchGD(source,query,artist,checkTimeout){
     try{
-        var sr=await muFetch(MUSIC_API+'?types=search&count=5&source='+source+'&name='+encodeURIComponent(query),4500).then(function(r){return r.json();});
+        var fullQ = artist ? query + ' ' + artist : query;
+        var sr=await muFetch(MUSIC_API+'?types=search&count=8&source='+source+'&name='+encodeURIComponent(fullQ),4500).then(function(r){return r.json();});
         if(!sr||!sr.length)return null;
-        var ranked=muRank(sr,query);
-        var got=(await Promise.all(ranked.slice(0,3).map(function(it){return muGdItemUrl(source,it).catch(function(){return null;});}))).filter(Boolean);
+        var ranked=muRank(sr,fullQ,artist);
+        // 候选池 = 引擎原生第一候选（等同参考代码信任原生排序）∪ 打分前5，pri 越小越优先
+        var pool=[],seenP={};
+        function pushP(it,pri){ var k=(it.id||it.name||'')+''; if(!seenP[k]){ seenP[k]=1; pool.push({it:it,pri:pri}); } }
+        if(sr[0])pushP(sr[0],0);
+        ranked.slice(0,5).forEach(function(it,ri){ pushP(it,ri+1); });
+        var got=(await Promise.all(pool.map(function(p){ return muGdItemUrl(source,p.it).then(function(r){ if(r)r.pri=p.pri; return r; }).catch(function(){return null;}); }))).filter(Boolean);
+        // v1.11.0：netease 追加 injahow Meting 直链候选（302→CDN 真实音频流，实测可用），
+        // 与 iarc/gdstudio 形成三路取链，不再单一依赖某一路
+        if(source==='netease'&&pool.length){
+            var top=pool[0];
+            got.push({url:'https://api.injahow.cn/meting/?server=netease&type=url&id='+encodeURIComponent(top.it.id),item:top.it,pri:top.pri+0.05});
+        }
         if(!got.length)return null;
-        return await muRaceCheck(got,function(g){return {url:g.url,name:g.item.name,artist:g.item.artist||g.item.author||'',source:source,id:g.item.id};});
+        return await muRaceCheck(got,function(g){return {url:g.url,name:g.item.name,artist:g.item.artist||g.item.author||'',source:source,id:g.item.id,pri:g.pri};},checkTimeout);
     }catch(e){}return null;
+}
+/* 引擎：Qijieya Meting API（netease 直链通道，搜索结果自带可播 url）。
+   与 gdstudio 完全独立的音源管道，参考组件的稳定性关键来源之一；
+   结果仍走 muRank 排序 + 时长感知校验，保证精准与可播并重 */
+async function muSearchQijieya(query,artist){
+    try{
+        var fullQ = artist ? query + ' ' + artist : query;
+        var qj=await muFetch('https://api.qijieya.cn/meting/?server=netease&type=search&name='+encodeURIComponent(fullQ),4500).then(function(r){return r.json();});
+        if(!qj||!qj.length)return null;
+        var ranked=muRank(qj,fullQ,artist);
+        // 同 gdstudio：原生第一候选 ∪ 打分前5，pri 越小越优先
+        var pool=[],seenP={};
+        function pushP(it,pri){ var k=(it.id||it.name||'')+''; if(!seenP[k]){ seenP[k]=1; pool.push({it:it,pri:pri}); } }
+        if(qj[0])pushP(qj[0],0);
+        ranked.slice(0,5).forEach(function(it,ri){ pushP(it,ri+1); });
+        var got=pool.map(function(p){
+            if(!p.it.url)return null;
+            var u=p.it.url;
+            if(u.indexOf('http://')===0)u=u.replace('http://','https://');
+            return {url:u,item:p.it,pri:p.pri};
+        }).filter(Boolean);
+        if(!got.length)return null;
+        return await muRaceCheck(got,function(g){
+            return {url:g.url,name:g.item.name,artist:g.item.artist||g.item.author||'',source:'qijieya',id:g.item.id||g.item.lrc_id||'',pri:g.pri};
+        },5000);
+    }catch(e){return null;}
 }
 /* ===== 4.6.2 QQ音乐/酷狗 官方搜索通道（JSONP 绕过 CORS） =====
    这两个平台的官方接口无 CORS 头、且 vkey/getdata 直链在纯浏览器拿不到，
@@ -719,17 +1188,22 @@ async function muSearchGD(source,query){
    gdstudio 的 netease/kuwo/joox 搜索同名可播歌曲来播放。
    常见歌曲同名命中率高，相当于"QQ/酷狗作为搜歌入口，网易云系负责出音源"。 */
 function muQQSearchCandidates(query){
-    return muJSONP('https://c.y.qq.com/soso/fcgi-bin/client_search_cp?w='+encodeURIComponent(query)+'&format=jsonp&p=1&n=6&cr=1&g_tk=5381&loginUin=0&hostUin=0', 'jsonpCallback', 6500).then(function(d){
+    return muJSONP('https://c.y.qq.com/soso/fcgi-bin/client_search_cp?w='+encodeURIComponent(query)+'&format=jsonp&p=1&n=6&cr=1&g_tk=5381&loginUin=0&hostUin=0', 'jsonpCallback', 5000).then(function(d){
         try{
             var list=(d&&d.data&&d.data.song&&d.data.song.list)||[];
             return list.map(function(s){
-                return {name:s.songname||'', artist:(s.singer||[]).map(function(x){return x.name||'';}).join(' / ')};
+                return {name:s.songname||'', artist:(s.singer||[]).map(function(x){return x.name||'';}).join(' / '), songmid:s.songmid||''};
             });
         }catch(e){return [];}
     });
 }
+// QQ 音乐直链：injahow meting 公共实例 302 重定向到 QQ 官方 CDN(aqqmusic.tc.qq.com)
+// Audio 元素自动跟随 302，跨域播放无需 CORS；vkey 由实例动态生成，地址持久可用
+function muQQUrl(songmid){
+    return 'https://api.injahow.cn/meting/?server=tencent&type=url&id='+encodeURIComponent(songmid);
+}
 function muKugouSearchCandidates(query){
-    return muJSONP('https://songsearch.kugou.com/song_search_v2?keyword='+encodeURIComponent(query)+'&page=1&pagesize=5&platform=WebFilter&userid=-1', 'callback', 6500).then(function(d){
+    return muJSONP('https://songsearch.kugou.com/song_search_v2?keyword='+encodeURIComponent(query)+'&page=1&pagesize=5&platform=WebFilter&userid=-1', 'callback', 5000).then(function(d){
         try{
             var list=(d&&d.data&&d.data.lists)||[];
             return list.map(function(s){
@@ -739,51 +1213,108 @@ function muKugouSearchCandidates(query){
     });
 }
 // 用候选（歌名+歌手）去 gdstudio 换源搜可播歌曲
-async function muSearchByCandidates(cands, fallbackQ, tag){
+async function muSearchByCandidates(cands, fallbackQ, tag, artist){
     if(!cands || !cands.length) return null;
+    var SRC3=['netease','kuwo','joox'];
+    var jobs=[];
     for(var i=0; i<cands.length && i<3; i++){
-        var q = cands[i].name + (cands[i].artist ? ' ' + cands[i].artist : '');
-        for(var si=0; si<3; si++){
-            var src = ['netease','kuwo','joox'][si];
-            var hit = await muSearchGD(src, q);
-            if(hit) return hit;
-        }
+        var q = (cands[i].name + ' ' + (artist || cands[i].artist || '')).trim();
+        (function(pri,qq){
+            for(var si=0; si<SRC3.length; si++){
+                (function(src){ jobs.push({pri:pri, p:muSearchGD(src,qq,artist).catch(function(){return null;})}); })(SRC3[si]);
+            }
+            // v1.10.9：Meting 直链通道也参与候选换源（独立于 gdstudio）
+            jobs.push({pri:pri, p:muSearchQijieya(qq,artist).catch(function(){return null;})});
+        })(i, q);
     }
-    // 兜底：直接用原关键词再试一遍网易云系
+    // 兜底：直接用原关键词再试一遍网易云系（全部并行竞速，候选优先级高）
     if(fallbackQ){
-        for(var si2=0; si2<3; si2++){
-            var hit2 = await muSearchGD(['netease','kuwo','joox'][si2], fallbackQ);
-            if(hit2) return hit2;
+        for(var si2=0; si2<SRC3.length; si2++){
+            (function(src){ jobs.push({pri:9, p:muSearchGD(src,fallbackQ,artist).catch(function(){return null;})}); })(SRC3[si2]);
+        }
+        jobs.push({pri:9, p:muSearchQijieya(fallbackQ,artist).catch(function(){return null;})});
+    }
+    var pairs=await Promise.all(jobs.map(function(j){ return j.p.then(function(h){ return {pri:j.pri, h:h}; }); }));
+    pairs.sort(function(a,b){ return a.pri - b.pri; });
+    for(var k=0; k<pairs.length; k++){
+        if(pairs[k].h){
+            if(pairs[k].h.pri===undefined)pairs[k].h.pri=0;
+            pairs[k].h.pri = pairs[k].pri*10 + (pairs[k].h.pri||0); // 候选优先级 + 引擎内排名
+            return pairs[k].h;
         }
     }
     return null;
 }
-async function muSearchQQ2(query){
+// QQ 音乐完整引擎：官方搜索(JSONP) + 官方直链(injahow 302)，失败兜底换源到网易云系
+async function muSearchQQFull(query,artist){
+    try{
+        var cands=await muQQSearchCandidates(query);
+        if(!cands||!cands.length)return await muSearchQQ2(query,artist);
+        var list=[];
+        for(var i=0;i<cands.length&&i<3;i++){
+            if(cands[i].songmid){
+                list.push({url:muQQUrl(cands[i].songmid),item:cands[i],pri:i});
+            }
+        }
+        if(!list.length)return await muSearchQQ2(query,artist);
+        var hit=await muRaceCheck(list,function(g){
+            return {url:g.url,name:g.item.name,artist:g.item.artist,source:'tencent',id:g.item.songmid,pri:g.pri};
+        },5000);
+        if(hit)return hit;
+        return await muSearchQQ2(query,artist);
+    }catch(e){}
+    return await muSearchQQ2(query,artist);
+}
+async function muSearchQQ2(query,artist){
     try{
         var cands = await muQQSearchCandidates(query);
         if(!cands.length) return null;
-        return await muSearchByCandidates(cands, query, 'tencent');
+        return await muSearchByCandidates(cands, query, 'tencent', artist);
     }catch(e){return null;}
 }
-async function muSearchKugou2(query){
+async function muSearchKugou2(query,artist){
     try{
         var cands = await muKugouSearchCandidates(query);
         if(!cands.length) return null;
-        return await muSearchByCandidates(cands, query, 'kugou');
+        return await muSearchByCandidates(cands, query, 'kugou', artist);
     }catch(e){return null;}
 }
 
 var sIn = panel.querySelector('#nico-mu-search-in');
+var aIn = panel.querySelector('#nico-mu-artist-in');
 var sBtn = panel.querySelector('#nico-mu-search-btn');
 var resDom = document.getElementById('nico-mu-res');
 // 搜索只列出结果（每条带"添加"键），点击添加才进歌单，不按不进、不自动播放
+var muSearchTicket = 0; // v1.11.0：搜索票据，过期轮次的回调不再改动界面
 function doSearch(){
     var q = (sIn.value||'').trim();
     if(!q) return;
+    var art = (aIn ? aIn.value : '') || '';
+    art = art.trim();
+    muAbortAll(); // v1.11.0：新搜索立即中止上一轮在途请求，连点不排队
+    var myTicket = ++muSearchTicket;
     sBtn.disabled = true; sBtn.textContent = '…';
     resDom.innerHTML = ''; resDom.classList.remove('show');
     titD.textContent = '搜索中...';
-    muResolveMulti(q).then(function(hits){
+    var firstArrived = false, totalShown = 0;
+    muResolveMulti(q, art, function(hit, count, total, done, isFinal){
+        if(myTicket !== muSearchTicket) return; // 已被新搜索取代，丢弃旧回调
+        // 竞速优先：第一个结果到达立即渲染，用户可立刻点添加；后续结果渐进追加
+        if(!firstArrived){
+            firstArrived = true;
+            sBtn.disabled = false; sBtn.textContent = '搜';
+            resDom.innerHTML = '';
+        }
+        if(hit) appendSearchResult(hit);
+        totalShown = count || 0;
+        if(isFinal){
+            titD.textContent = totalShown ? ('找到 ' + totalShown + ' 个结果') : '搜索完成';
+        }else{
+            titD.textContent = '找到 ' + count + ' 个结果' + (count < total ? '（继续搜索中…）' : '');
+        }
+        resDom.classList.add('show');
+    }).then(function(hits){
+        if(myTicket !== muSearchTicket) return;
         sBtn.disabled = false; sBtn.textContent = '搜';
         if(!hits || !hits.length){
             titD.textContent = '未找到音源';
@@ -791,81 +1322,298 @@ function doSearch(){
             empty.innerHTML = '<span class="nico-m-res-name">未找到可播音源</span>';
             resDom.appendChild(empty); resDom.classList.add('show');
             setTimeout(function(){ loadP(); }, 1500);
-            return;
         }
-        titD.textContent = '找到 ' + hits.length + ' 个结果';
-        hits.forEach(function(hit){
-            var art = Array.isArray(hit.artist) ? hit.artist.join(' / ') : (hit.artist||'');
-            var label = hit.name + (art ? ' - '+art : '');
-            var it = document.createElement('div'); it.className = 'nico-m-res-it';
-            var nm = document.createElement('span'); nm.className = 'nico-m-res-name';
-            nm.textContent = label; nm.title = label;
-            var add = document.createElement('button'); add.type = 'button';
-            add.className = 'nico-m-res-add'; add.textContent = '添加';
-            add.onclick = function(){
-                playlist.unshift({name: hit.name, artist: art, url: hit.url});
-                buildList(); cIdx = 0;
-                nicoSavePlaylist();
-                add.className = 'nico-m-res-add added'; add.textContent = '已添加';
-                nicoShowToast('已添加到歌单');
-            };
-            it.appendChild(nm); it.appendChild(add);
-            resDom.appendChild(it);
-        });
-        resDom.classList.add('show');
     });
 }
 sBtn.onclick = doSearch;
 sIn.addEventListener('keydown', function(e){ if(e.key==='Enter'){ doSearch(); } });
-/* ===== 4.5.1 网易云歌单一键导入（gdstudio types=playlist，CORS 可用） ===== */
+if(aIn) aIn.addEventListener('keydown', function(e){ if(e.key==='Enter'){ doSearch(); } });
+/* ===== 4.5.1 网易云歌单一键导入（v1.12.0 重写） =====
+   修复1：链接识别 —— 支持 music.163.com/#/playlist?id=xxx、/playlist/xxx、
+   ?id=xxx、裸 ID、163cn.tv 短链（fetch 跟随跳转还原真实链接）；
+   修复2：读取双通道 —— gdstudio playlist 为主，Meting playlist（injahow/qijieya）
+   兜底，响应结构多形态兼容；
+   修复3：音源解析 —— 不再逐首按"歌名+歌手"搜索（慢且可能配错翻唱），改为按
+   网易云歌曲 ID 走持久 302 直链（injahow/qijieya，每次请求自动换新签名），
+   iarc/gdstudio 短效链兜底，并记录 sid/src 供后续失效时精确重解析；
+   并行批量解析（8 路），大歌单不卡死。 */
 function nicoExtractPlaylistId(input){
     var s = String(input || '').trim();
-    var m = s.match(/playlist[\/=](\d+)/i) || s.match(/^[\?&]?id=(\d+)/) || s.match(/^(\d{6,15})$/);
-    return m ? m[1] : '';
+    if(!s) return '';
+    var m = s.match(/^(\d{6,15})$/);
+    if(m) return m[1];
+    // music.163.com/#/playlist?id=xxx / playlist/xxx / playlist?xxx / playlist=xxx
+    m = s.match(/playlist[\/?=&#]{0,2}(?:id=)?(\d{6,15})/i);
+    if(m) return m[1];
+    m = s.match(/[?&]id=(\d{6,15})/) || s.match(/\/(\d{6,15})(?:[?#]|$)/);
+    if(m) return m[1];
+    return '';
+}
+// 短链（163cn.tv）跟随跳转还原真实链接；普通链接原样返回
+function nicoResolveRedirect(input){
+    return new Promise(function(res){
+        if(!/163cn\.tv/i.test(String(input||''))){ res(input); return; }
+        var c = new AbortController();
+        var tm = setTimeout(function(){ try{c.abort();}catch(e){} res(input); }, 7000);
+        fetch(input, {mode:'no-cors', redirect:'follow', signal:c.signal}).then(function(r){
+            clearTimeout(tm);
+            var u = r && r.url;
+            res((u && u.indexOf('http') === 0) ? u : input);
+        }).catch(function(){ clearTimeout(tm); res(input); });
+    });
+}
+// 兼容多种歌单响应结构：gdstudio 的 {playlist:{tracks:[]}} / 裸数组 / result 等
+function nicoPickTracks(res){
+    if(!res) return [];
+    if(Array.isArray(res)) return res;
+    if(res.playlist && Array.isArray(res.playlist.tracks)) return res.playlist.tracks;
+    if(Array.isArray(res.tracks)) return res.tracks;
+    if(res.playlist && Array.isArray(res.playlist)) return res.playlist;
+    if(Array.isArray(res.result)) return res.result;
+    if(res.songs && Array.isArray(res.songs)) return res.songs;
+    return [];
+}
+function nicoNormTrack(t){
+    var name = t.name || t.title || '';
+    var artist = '';
+    if(Array.isArray(t.ar)) artist = t.ar.map(function(a){ return a.name || ''; }).join(' / ');
+    else if(Array.isArray(t.artists)) artist = t.artists.map(function(a){ return a.name || ''; }).join(' / ');
+    else if(Array.isArray(t.artist)) artist = t.artist.map(function(a){ return (typeof a === 'string') ? a : (a.name || ''); }).join(' / ');
+    else if(typeof t.artist === 'string') artist = t.artist;
+    else if(typeof t.singer === 'string') artist = t.singer;
+    var sid = t.id !== undefined && t.id !== null ? String(t.id) : (t.songmid || '');
+    // meting playlist 不返回 id 字段，但 url 里带歌曲 ID，可提取用于失效重解析
+    if(!sid && t.url){ var m2 = String(t.url).match(/[?&]id=(\d+)/); if(m2) sid = m2[1]; }
+    // v1.13.0：抓取预期时长（netease dt=毫秒 / meting duration=秒 / interval=秒），
+    // 用于"试听版 vs 完整版"判定与换源比对
+    var dur = 0;
+    if(typeof t.dt === 'number' && t.dt > 0) dur = t.dt / 1000;
+    else if(typeof t.dt === 'string' && t.dt) dur = (parseFloat(t.dt) || 0) / 1000;
+    if(!dur && typeof t.duration === 'number' && t.duration > 0) dur = t.duration;
+    if(!dur && typeof t.duration === 'string' && t.duration) dur = parseFloat(t.duration) || 0;
+    if(!dur && typeof t.interval === 'number' && t.interval > 0) dur = t.interval;
+    return { name: name, artist: artist, sid: sid, url: t.url || '', dur: dur };
+}
+// 歌单读取：gdstudio 主通道 + Meting playlist 兜底
+async function nicoFetchPlaylistData(pid){
+    try{
+        var res = await muFetch(MUSIC_API + '?types=playlist&source=netease&id=' + encodeURIComponent(pid), 12000).then(function(r){ return r.json(); });
+        var tr = nicoPickTracks(res);
+        if(tr && tr.length) return tr.map(nicoNormTrack);
+    }catch(e){}
+    var metingUrls = [
+        'https://api.injahow.cn/meting/?server=netease&type=playlist&id=',
+        'https://api.qijieya.cn/meting/?server=netease&type=playlist&id='
+    ];
+    for(var i=0; i<metingUrls.length; i++){
+        try{
+            var arr = await muFetch(metingUrls[i] + encodeURIComponent(pid), 12000).then(function(r){ return r.json(); });
+            var tr2 = nicoPickTracks(arr);
+            if(tr2 && tr2.length) return tr2.map(nicoNormTrack);
+        }catch(e){}
+    }
+    return [];
+}
+// 按网易云歌曲 ID 多路取链 + 时长择优（v1.13.0，反超参考实现）：
+// 参考实现取"第一条可播"（可能正是 30-60s 试听）；我们四路（injahow/qijieya/iarc/gdstudio）
+// 并行实测，全部拿到后选"最长 / 最接近预期"的一条——完整版永远优先于试听版。
+// 返回 {url, dur, trial, candidates}；trial=true 表示该 ID 只拿到疑似试听版。
+async function nicoResolveByNeteaseId(id, expectedDur){
+    if(!id) return {url:'',dur:0,trial:false,candidates:[]};
+    var cands = [
+        'https://api.injahow.cn/meting/?server=netease&type=url&id=' + encodeURIComponent(id),
+        'https://api.qijieya.cn/meting/?server=netease&type=url&id=' + encodeURIComponent(id)
+    ];
+    var probes = cands.map(function(u){
+        return muProbeUrlFull(u, 5000).then(function(r){ return r.ok ? {url:u, dur:r.dur} : null; }).catch(function(){ return null; });
+    });
+    var iuP = muIarcUrl(id).then(function(u){
+        return u ? muProbeUrlFull(u, 5000).then(function(r){ return r.ok ? {url:u, dur:r.dur} : null; }).catch(function(){ return null; }) : null;
+    }).catch(function(){ return null; });
+    var gdP = muFetch(MUSIC_API + '?types=url&source=netease&id=' + encodeURIComponent(id) + '&br=320', 6000)
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+            var u = (j && j.url) || '';
+            return u ? muProbeUrlFull(u, 5000).then(function(r){ return r.ok ? {url:u, dur:r.dur} : null; }).catch(function(){ return null; }) : null;
+        })
+        .catch(function(){ return null; });
+    var list = (await Promise.all(probes.concat([iuP, gdP]))).filter(Boolean);
+    if(!list.length) return {url:'',dur:0,trial:false,candidates:[]};
+    var exp = expectedDur || 0;
+    function score(x){
+        var d = x.dur;
+        if(!d || !isFinite(d)) return 2;              // 流式未知时长：已验证可播 → 按完整版对待（试听mp3几乎都有固定时长）
+        if(exp > 0 && d >= exp * 0.85) return 3;      // 达到预期 → 完整版
+        if(exp > 0) return 1;                         // 已知但明显短于预期 → 试听/截断
+        if(d > 60) return 2;                          // 无预期：明确完整
+        if(d > 30) return 1;                          // 无预期：疑似试听
+        return 0;
+    }
+    list.sort(function(a,b){ return (score(b)-score(a)) || ((b.dur||0)-(a.dur||0)); });
+    var best = list[0];
+    var trial = !!(best.dur && isFinite(best.dur) && (exp > 0 ? best.dur < exp * 0.85 : best.dur <= 60));
+    return { url: best.url, dur: best.dur, trial: trial, candidates: list };
+}
+// 全引擎找完整版（v1.13.0）：对搜索候选逐个实测时长，选"最长 / 最接近预期"的版本。
+// 与参考实现"第一条通过就用"不同：换源前先确认真比现有音源更完整，绝不越换越短。
+async function nicoFindFullVersion(name, artist, expectedDur, prefer){
+    if(!name) return null;
+    var hits = await muResolveMulti(name, artist || '');
+    if(!hits || !hits.length) return null;
+    var exp = expectedDur || 0;
+    var ps = await Promise.all(hits.slice(0, 6).map(function(h){
+        return muProbeUrlFull(h.url, 5000).then(function(pr){
+            if(!pr || !pr.ok) return null;
+            var d = pr.dur, s = 0;
+            if(d && isFinite(d)){
+                if(exp > 0) s = d >= exp * 0.85 ? 3 : (d >= exp * 0.5 ? 2 : 1);
+                else s = d > 60 ? 3 : (d > 30 ? 2 : 1);
+            } else { s = 2; } // 流式未知时长：可播即算可用
+            return { h: h, dur: d, score: s };
+        }).catch(function(){ return null; });
+    }));
+    var scored = [];
+    for(var i=0;i<ps.length;i++) if(ps[i]) scored.push(ps[i]);
+    if(!scored.length) return null;
+    scored.sort(function(a,b){ return (b.score-a.score) || ((b.dur||0)-(a.dur||0)); });
+    var best = scored[0], h = best.h;
+    // 换源判定：只有"确实更完整/更长"才换，否则保留原音源
+    if(prefer && prefer.url){
+        var pd = prefer.dur || 0, bd = best.dur || 0;
+        var shouldSwap = false;
+        if(bd && bd > 60 && pd <= 60) shouldSwap = true;          // 新完整、原试听
+        else if(bd && pd && bd > pd) shouldSwap = true;           // 新的更长
+        else if(bd && !pd) shouldSwap = true;                     // 原时长未知，新已知
+        if(!shouldSwap) return null;
+    }
+    var artStr = Array.isArray(h.artist) ? h.artist.join(' / ') : (h.artist || '');
+    var bTrial = !!(best.dur && isFinite(best.dur) && (exp > 0 ? best.dur < exp * 0.85 : best.dur <= 60));
+    return { name: h.name || name, artist: artStr || artist, url: h.url, dur: best.dur, sid: h.id || '', src: h.source || '', trial: bTrial };
+}
+// 歌曲失效重解析（v1.13.0）：有 sid 先按原 ID 多路取链（完整版优先），
+// ID 只给试听版/全灭时自动退回全引擎"歌名+歌手"搜索兜底——不再直接跳歌
+async function nicoReResolve(s){
+    if(!s || !s.name) return null;
+    var exp = s.dur || 0;
+    if(s.sid && (s.src === 'netease' || s.src === 'qijieya')){
+        var r1 = await nicoResolveByNeteaseId(s.sid, exp);
+        if(r1.url && !r1.trial) return { name: s.name, artist: s.artist, url: r1.url, dur: r1.dur, sid: s.sid, src: 'netease', trial: false };
+        var f1 = await nicoFindFullVersion(s.name, s.artist || '', exp, r1.url ? r1 : null);
+        if(f1) return f1;
+        if(r1.url) return { name: s.name, artist: s.artist, url: r1.url, dur: r1.dur, sid: s.sid, src: 'netease', trial: true };
+        return null;
+    }
+    if(s.sid && s.src === 'tencent'){
+        var u2 = muQQUrl(s.sid);
+        var okT = await muCheckUrlFast(u2, 5000);
+        if(okT) return { name: s.name, artist: s.artist, url: u2, sid: s.sid, src: 'tencent', dur: 0 };
+        return await nicoFindFullVersion(s.name, s.artist || '', exp);
+    }
+    if(s.sid && s.src){
+        try{
+            var ur = await muFetch(MUSIC_API + '?types=url&source=' + encodeURIComponent(s.src) + '&id=' + encodeURIComponent(s.sid) + '&br=320', 6500).then(function(r){ return r.json(); });
+            if(ur && ur.url){ var prU = await muProbeUrlFull(ur.url, 5000); if(prU && prU.ok) return { name: s.name, artist: s.artist, url: ur.url, dur: prU.dur, sid: s.sid, src: s.src }; }
+        }catch(e){}
+        var f3 = await nicoFindFullVersion(s.name, s.artist || '', exp);
+        if(f3) return f3;
+        return null;
+    }
+    // 无 ID（旧数据）：退回按歌名+歌手搜索
+    var hits = await muResolveMulti(s.name, s.artist || '');
+    if(hits && hits.length){
+        var artStr = Array.isArray(hits[0].artist) ? hits[0].artist.join(' / ') : (hits[0].artist || s.artist);
+        return { name: hits[0].name, artist: artStr, url: hits[0].url, dur: 0, sid: hits[0].id || '', src: hits[0].source || '' };
+    }
+    return null;
+}
+// 单曲解析（歌单导入用，v1.13.0）：
+// ① 按 ID 四路取链 + 时长择优（完整版优先）；
+// ② 只拿到试听版 → 全引擎搜索换完整版；
+// ③ meting 自带 url 实测兜底；④ 无 ID 退回"歌名+歌手"搜索。
+// 返回 {name, artist, url, dur, sid, src, trial}；trial=true 表示最终只有试听版
+async function nicoResolveTrack(t){
+    if(t.sid){
+        var r = await nicoResolveByNeteaseId(t.sid, t.dur || 0);
+        if(r.url && !r.trial) return { name: t.name, artist: t.artist, url: r.url, dur: r.dur, sid: t.sid, src: 'netease', trial: false };
+        if(r.url && r.trial){
+            var full = await nicoFindFullVersion(t.name, t.artist, t.dur || 0, r);
+            if(full) return full;
+            return { name: t.name, artist: t.artist, url: r.url, dur: r.dur, sid: t.sid, src: 'netease', trial: true };
+        }
+    }
+    if(t.url){
+        var ok = await muProbeUrlFull(t.url, 4000);
+        if(ok && ok.ok){
+            var tr = !!(ok.dur && isFinite(ok.dur) && ((t.dur||0) > 0 ? ok.dur < (t.dur||0) * 0.85 : ok.dur <= 60));
+            if(tr){
+                var full2 = await nicoFindFullVersion(t.name, t.artist, t.dur || 0);
+                if(full2) return full2;
+            }
+            return { name: t.name, artist: t.artist, url: t.url, dur: ok.dur, sid: t.sid || '', src: 'netease', trial: tr };
+        }
+    }
+    if(!t.name) return null;
+    var full3 = await nicoFindFullVersion(t.name, t.artist, t.dur || 0);
+    if(full3) return full3;
+    try{
+        var got = await muSearchGD('netease', t.name, t.artist);
+        if(got) return { name: got.name, artist: got.artist || t.artist, url: got.url, sid: got.id || '', src: got.source || 'netease', trial: false };
+    }catch(e){}
+    return null;
+}
+function nicoIsDup(t){
+    for(var i=0; i<playlist.length; i++){
+        var p = playlist[i];
+        if(t.sid && p.sid && String(p.sid) === String(t.sid)) return true;
+        if(p.name === t.name && (p.artist || '') === (t.artist || '')) return true;
+    }
+    return false;
 }
 async function nicoImportPlaylist(){
     var input = prompt('输入网易云歌单链接或歌单ID：\n例如 https://music.163.com/#/playlist?id=3778678\n或直接 3778678');
     if(input === null || input === '') return;
-    var pid = nicoExtractPlaylistId(input);
+    var resolved = await nicoResolveRedirect(input);
+    var pid = nicoExtractPlaylistId(resolved);
     if(!pid){ nicoShowToast('无法识别歌单ID'); return; }
     var plBtn = panel.querySelector('#nico-mu-pl-btn');
     if(plBtn){ plBtn.disabled = true; plBtn.textContent = '…'; }
-    nicoShowToast('正在读取歌单...');
     try{
-        var res = await muFetch(MUSIC_API + '?types=playlist&id=' + encodeURIComponent(pid), 10000).then(function(r){ return r.json(); });
-        var tracks = (res && res.playlist && res.playlist.tracks) || [];
+        var tracks = await nicoFetchPlaylistData(pid);
         if(!tracks.length){ nicoShowToast('歌单为空或读取失败'); return; }
-        nicoShowToast('歌单共 ' + tracks.length + ' 首，开始解析音源...');
-        var added = 0, existed = 0, failed = 0;
+        // 先去重（已有歌单 + 歌单内部），只解析新歌
+        var seenK = {}, fresh = [];
         for(var i=0; i<tracks.length; i++){
             var t = tracks[i];
-            var tName = t.name || '';
-            var tArtist = (t.ar || []).map(function(a){ return a.name || ''; }).join(' / ');
-            var dup = false;
-            for(var j=0; j<playlist.length; j++){
-                if(playlist[j].name === tName && (playlist[j].artist || '') === tArtist){ dup = true; break; }
+            var k = t.sid ? ('s:' + t.sid) : ('n:' + t.name + '|' + t.artist);
+            if(seenK[k]) continue;
+            seenK[k] = 1;
+            if(nicoIsDup(t)) continue;
+            fresh.push(t);
+        }
+        if(!fresh.length){ nicoShowToast('歌单歌曲都已在列表中'); return; }
+        nicoShowToast('歌单共 ' + tracks.length + ' 首，新增 ' + fresh.length + ' 首，开始解析音源...');
+        var added = 0, existed = tracks.length - fresh.length, failed = 0, done = 0, trialOnly = 0;
+        var CONC = 5; // v1.13.1：8→5 降低 iarc/meting 批量限流风险，VIP 完整版取链更稳
+        for(var i2=0; i2<fresh.length; i2+=CONC){
+            var slice = fresh.slice(i2, i2 + CONC);
+            var results = await Promise.all(slice.map(function(t){ return nicoResolveTrack(t).catch(function(){ return null; }); }));
+            for(var r=0; r<slice.length; r++){
+                var got = results[r];
+                if(got){ playlist.push(got); added++; if(got.trial) trialOnly++; }
+                else{ failed++; }
             }
-            if(dup){ existed++; continue; }
-            var got = null;
-            try{ got = await muSearchGD('netease', tName + ' ' + tArtist); }catch(e){}
-            if(got){
-                playlist.push({name: got.name, artist: got.artist || tArtist, url: got.url});
-                added++;
-            } else {
-                failed++;
-            }
-            if(i % 5 === 0 || i === tracks.length - 1){
-                nicoShowToast('导入中 ' + (i+1) + '/' + tracks.length + '（新增' + added + '，失败' + failed + '）');
-            }
+            done += slice.length;
+            nicoShowToast('解析中 ' + Math.min(done, fresh.length) + '/' + fresh.length + '（新增' + added + '，失败' + failed + '）');
         }
         nicoSavePlaylist();
         buildList();
-        if(added){ cIdx = playlist.length - 1; loadP(); }
-        nicoShowToast('导入完成：新增 ' + added + ' 首' + (existed ? '，跳过重复 ' + existed : '') + (failed ? '，失败 ' + failed : ''));
+        if(added){ cIdx = Math.max(0, playlist.length - added); loadP(); }
+        nicoShowToast('导入完成：新增 ' + added + ' 首' + (trialOnly ? '，其中 ' + trialOnly + ' 首仅有试听版' : '') + (existed ? '，跳过重复 ' + existed : '') + (failed ? '，失败 ' + failed : ''));
     }catch(e){
         nicoShowToast('歌单导入失败');
+    }finally{
+        if(plBtn){ plBtn.disabled = false; plBtn.textContent = '歌单'; }
     }
-    if(plBtn){ plBtn.disabled = false; plBtn.textContent = '歌单'; }
 }
 panel.querySelector('#nico-mu-pl-btn').addEventListener('click', nicoImportPlaylist);
 var trId = null;
@@ -913,25 +1661,53 @@ function parseLRC(lrcText){
     }
     return res.sort(function(a,b){ return a.time - b.time; });
 }
-function fetchDanmuLyrics(song, artist){
+function fetchDanmuLyrics(song, artist, sid, src){
     if(!song) return;
-    var key = song + '_' + (artist||'');
+    var key = song + '_' + (artist||'') + '_' + (sid||'');
     if(key === nicoLyricKey && nicoLyrics.length) return;
     nicoLyricKey = key; nicoLyrics = [];
     var q = song + (artist ? ' ' + artist : '');
     var found = false;
-    ['netease','tencent','kugou'].forEach(function(src){
-        muFetch(DANMU_API + '?types=search&count=3&source=' + src + '&name=' + encodeURIComponent(q), 6000)
-        .then(function(r){ return r.json(); })
-        .then(function(sr){
-            if(found || !sr || !sr.length) return;
-            var item = sr[0];
-            return muFetch(DANMU_API + '?types=lyric&id=' + item.id + '&source=' + src, 6000)
+    // v1.12.1：优先按歌曲 ID 精确拉歌词（对齐 lyric-card 参考实现），
+    // 不再依赖"搜歌名→取第一条"（可能搜到错版本歌词）；失败再退回歌名搜索
+    function tryBySid(sidVal, srcVal){
+        if(!sidVal) return Promise.resolve(false);
+        var srcForGd = (srcVal === 'qijieya' || srcVal === 'netease') ? 'netease' : (srcVal || 'netease');
+        var jobs = [
+            // 通道1：gdstudio lyric 按 ID 直拉
+            muFetch(DANMU_API + '?types=lyric&id=' + encodeURIComponent(sidVal) + '&source=' + srcForGd, 6000)
             .then(function(r){ return r.json(); })
-            .then(function(lr){
-                if(!found && lr && lr.lyric){ found = true; nicoLyrics = parseLRC(lr.lyric); }
-            });
-        }).catch(function(){});
+            .then(function(lr){ return (lr && lr.lyric) ? lr.lyric : ''; })
+            .catch(function(){ return ''; }),
+            // 通道2：qijieya meting lrc 按 ID 直拉
+            muFetch('https://api.qijieya.cn/meting/?server=netease&type=lrc&id=' + encodeURIComponent(sidVal), 6000)
+            .then(function(r){ return r.json(); })
+            .then(function(lr){ return (lr && lr.lrc) ? lr.lrc : ''; })
+            .catch(function(){ return ''; })
+        ];
+        return Promise.all(jobs).then(function(rs){
+            for(var i=0; i<rs.length; i++){
+                if(rs[i] && !found){ found = true; nicoLyrics = parseLRC(rs[i]); return true; }
+            }
+            return false;
+        });
+    }
+    tryBySid(sid, src).then(function(ok){
+        if(ok) return;
+        // 退回：按歌名搜索（netease/tencent/kugou 三源）
+        ['netease','tencent','kugou'].forEach(function(src2){
+            muFetch(DANMU_API + '?types=search&count=3&source=' + src2 + '&name=' + encodeURIComponent(q), 6000)
+            .then(function(r){ return r.json(); })
+            .then(function(sr){
+                if(found || !sr || !sr.length) return;
+                var item = sr[0];
+                return muFetch(DANMU_API + '?types=lyric&id=' + item.id + '&source=' + src2, 6000)
+                .then(function(r){ return r.json(); })
+                .then(function(lr){
+                    if(!found && lr && lr.lyric){ found = true; nicoLyrics = parseLRC(lr.lyric); }
+                });
+            }).catch(function(){});
+        });
     });
     // 8 秒没找到歌词则降级只显示歌曲名
     setTimeout(function(){
@@ -1057,10 +1833,10 @@ var _origLoadP = loadP;
 loadP = function(){
     _origLoadP();
     var s = playlist[cIdx];
-    if(s) fetchDanmuLyrics(s.name, s.artist || '');
+    if(s) fetchDanmuLyrics(s.name, s.artist || '', s.sid || '', s.src || '');
 };
 // 初始加载当前歌曲歌词
-try{ var _cs = playlist[cIdx]; if(_cs) fetchDanmuLyrics(_cs.name, _cs.artist || ''); }catch(e){}
+try{ var _cs = playlist[cIdx]; if(_cs) fetchDanmuLyrics(_cs.name, _cs.artist || '', _cs.sid || '', _cs.src || ''); }catch(e){}
 
 /* ===== 4.8 独立图片库：本地上传 / IndexedDB 持久缓存 / 点击删除（不干扰图片墙） ===== */
 var nicoToast = document.createElement('div');
