@@ -1,4 +1,4 @@
-/* Qixian Draw Panel (Nico Draw Panel) - SillyTavern Extension v1.14.1
+/* nico Draw Panel (Nico Draw Panel) - SillyTavern Extension v1.14.1
    角色抽屉面板：从屏幕顶部下拉展开角色资料卡 + 音乐播放器 + 图片库 + 弹幕歌词。
    所有样式类名 / ID / 全局变量统一使用 nico 前缀（nico-* / Nico-* / __nico_*），
    与 nicoPhone 系列组件保持命名一致，避免与其他扩展的旧前缀类名冲突。
