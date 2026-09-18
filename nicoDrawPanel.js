@@ -88,11 +88,33 @@
        CDN 流式响应的 VIP 直链（参考实现 Infinity>2 判定通过）；
      · iarc 直链统一 http→https 升级，杜绝 https 页面下混合内容被浏览器拦截；
      · 歌单重导自动刷新已有同 ID 歌曲：旧数据若是试听短轨，重导一次即原位换成长全长音源。
+   v1.13.0 搜索精准与"不换错歌"大修复（2026-09 实测第三方 API 大量失效后针对性修复）：
+     · 实测结论：gdstudio search/playlist 存活，但 iarc / injahow url / qijieya url 均返回空，
+       injahow / qijieya 的 search 通道返回 HTML 帮助页（非 JSON）；QQ/酷狗 JSONP 存活。
+       即"VIP 全长通道"当前几乎全部不可用，可播直链实际只剩 gdstudio 按 ID 取链。
+     · 打分器 muRank 重写：歌手出现在歌名里也算命中（如"晴天 (原唱 周杰伦)"）、
+       "深情/女声/男声/DJ/R&B/钢琴/伴奏/串烧/Cover"等版本标签重罚、带"原唱"标记加分；
+       修复 gdstudio 原生第一候选常为翻唱/深情版、打分器却把正确版本压下去的精准度问题。
+     · 候选池重构：不再强制"原生第一候选永远优先"（它就是翻唱重灾区），改为按打分排序，
+       原生第一候选降级为打分前 6 之外的末位兜底（pri=99），正确版本不再被翻唱抢位。
+     · 引擎结算改"优先级感知"：低优先级引擎（QQ/酷狗换源）先返回时，若网易云系仍在途，
+       最多等 3.5s 让其出结果，慢但对绝不让快但错抢位；结算后不再中止在途请求，
+       晚到的正确结果仍会追加进结果列表。
+     · 换源强匹配校验：QQ/酷狗"搜索入口→网易云系出音源"的换源结果必须与用户输入的
+       歌名+歌手强匹配，对不上直接丢弃——杜绝"显示对、声音错"与"莫名换成其它歌"。
+     · 缓存修复：gdstudio 直链是限时签名 URL（约数小时过期），原 10 分钟缓存会命中死链，
+       改 2 分钟 TTL + 命中后复验首条 URL，失效即弃缓存重搜。
+     · 自动切歌收敛：歌曲音源失效且按原 ID 重解析失败时，不再自动"切到下一首"
+       （"莫名其妙换成其它"的直接根源），改为暂停并提示；旧数据无 ID 兜底搜索时
+       必须强匹配，配不到正确版本宁可暂停也不换错歌。
+     · 歌单导入防错配：按 ID 解析失败退回"歌名+歌手搜索"时加强匹配校验，配到翻唱/错版本
+       的歌曲不再混进歌单（失败数明确提示）；gdstudio 直链纳入并行解析通道，
+       当前 iarc/meting 全灭时的实际主力通道。
    已移除原组件中的"全域文本阅读器"(STORY ARCHIVE / MutationObserver 文本捕获)。
    所有 DOM 直接注入酒馆主页面，无 iframe 间接层。 */
 (function(){
 'use strict';
-try{console.log('%c[Nico-Draw-Panel] v1.12.2 已加载：歌单VIP全长·iarc优先·时长感知结算','color:#818cf8;font-weight:bold');}catch(e){}
+try{console.log('%c[Nico-Draw-Panel] v1.13.0 已加载：搜索精准修复·歌单导入防错配·禁止自动换歌','color:#818cf8;font-weight:bold');}catch(e){}
 
 var CSS_ID='Nico-Draw-Style', PANEL_ID='Nico-Draw-Panel';
 
@@ -565,7 +587,7 @@ au.onended = function(){
     else { cIdx = Math.floor(Math.random() * playlist.length); loadP(); pPlay(); }
 };
 
-/* ===== v1.11.0 播放容错：死链自动换源重搜一次，再失败自动切下一首 ===== */
+/* ===== v1.11.0 播放容错：死链自动换源重搜一次；v1.13.0：重解析失败不再自动切歌 ===== */
 var muPlayRetried = {};
 function muGotoNext(){
     if(playlist.length <= 1){ try{ au.currentTime = 0; }catch(e){} return; }
@@ -580,7 +602,11 @@ au.addEventListener('error', function(){
     var k = (s.name||'') + '|' + (s.url||'');
     if(muPlayRetried[k]){
         delete muPlayRetried[k];
-        muGotoNext(); // 已重试过仍失败 → 切下一首
+        // v1.13.0：重试过仍失败 → 暂停并提示，不再自动"切到下一首"——
+        // 这是"听着听着莫名其妙换成其它歌"的直接根源
+        try{ au.pause(); }catch(e){}
+        uIcon(false);
+        nicoShowToast('音源失效，已暂停（可点下一首）');
         return;
     }
     muPlayRetried[k] = true;
@@ -599,7 +625,10 @@ au.addEventListener('error', function(){
             if(muPlayIntent){ try{ pPlay(); }catch(e){} } // 用户正在听，修复后自动续播
             nicoShowToast('已切换到新音源');
         }else{
-            muGotoNext();
+            // v1.13.0：修复失败 → 暂停并提示（原实现 muGotoNext 自动切歌 = 莫名换歌元凶）
+            try{ au.pause(); }catch(e){}
+            uIcon(false);
+            nicoShowToast('音源失效，已暂停（可点下一首）');
         }
     });
 });
@@ -775,6 +804,8 @@ async function muGdItemUrl(source,item){
 // 候选相关度排序：歌名/歌手多词包含匹配累计加分，翻唱/伴奏/Live/remix 降权
 // v1.10.9 精修：歌手支持多段归一（"A / B"任一命中即算）；歌手字段缺失不再误罚；
 // 歌名+歌手完全匹配额外加权，保证"精准命中"永远排在最前
+// v1.13.0 重写：歌手出现在歌名里也算命中；版本标签（深情/女声/DJ/钢琴/Cover 等）重罚；
+// "原唱"标记加分——修复 gdstudio 原生排序把翻唱放最前时打分器也跟着选错的问题
 function muRank(items,query,artist){
     // 常见繁→简映射：Joox 等源返回繁体歌手名，统一后比对更准
     var T2S={'傑':'杰','倫':'伦','劉':'刘','陳':'陈','張':'张','孫':'孙','楊':'杨','鄧':'邓','蘇':'苏','鄒':'邹','黃':'黄','吳':'吴','鄭':'郑','許':'许','謝':'谢','韓':'韩','馮':'冯','趙':'赵','蔣':'蒋','蕭':'萧','葉':'叶','羅':'罗','項':'项','鍾':'钟','鐘':'钟','譚':'谭','馬':'马','陸':'陆','萬':'万','賴':'赖','範':'范','龍':'龙','鳳':'凤','愛':'爱','國':'国','學':'学','樂':'乐','單':'单','雙':'双','東':'东','華':'华','麗':'丽','兒':'儿'};
@@ -789,12 +820,13 @@ function muRank(items,query,artist){
         var name=norm(it.name||''),score=0;
         var bare=name.replace(/[（(].*?[)）]/g,'').trim();
         var art=artOf(it);
-        // 歌手匹配：命中大幅加分；有歌手信息但完全不匹配才降权（防翻唱/错版本）；
-        // 歌手字段缺失（部分源不返回）不做惩罚，避免把正确答案压下去
+        // v1.13.0：歌手命中增强——歌手出现在歌名里也算命中（如"晴天 (原唱 周杰伦)"，
+        // gdstudio 常把原版作者写进歌名而 artist 字段是翻唱者本人）
+        var artHitInName = !!wantArt && name.indexOf(wantArt) >= 0;
         if(wantArt){
-            var artParts=artTokens(wantArt),artHit=false;
-            for(var ai=0;ai<artParts.length;ai++){ if(art.indexOf(artParts[ai])>=0){artHit=true;break;} }
-            if(artHit){ score+=60; if(art===wantArt)score+=25; }
+            var artParts=artTokens(wantArt),artHit=artHitInName;
+            for(var ai=0;ai<artParts.length;ai++){ if(!artHit&&art.indexOf(artParts[ai])>=0){artHit=true;break;} }
+            if(artHit){ score+=60; if(art===wantArt||artHitInName)score+=25; }
             else if(art){ score-=35; }
         }
         if(parts.length>1){
@@ -808,10 +840,15 @@ function muRank(items,query,artist){
         }else{
             if(name===q)score+=100; else if(bare===q)score+=85; else if(bare.indexOf(q)>=0)score+=40;
         }
-        // 歌名（去括号后）+ 歌手全等：绝对优先，等同官方原版
+        // 歌名（去括号后）+ 歌手全等：绝对优先，等同官方原版；歌名含歌手同等待遇
         if(bare===q&&(!wantArt||art===wantArt))score+=120;
+        if(bare===q&&artHitInName)score+=120;
         if(!/[（(].*?[)）]/.test(it.name||''))score+=8;
-        if(/翻唱|伴奏|[Ll]ive|现场|remix|钢琴|纯音乐/.test(it.name||''))score-=30;
+        // v1.13.0：版本标签重罚（深情/翻唱/女声/男声/DJ/R&B/钢琴/伴奏/Live/串烧/Cover 等），
+        // 修复 gdstudio 把"晴天(深情版)"排在原版前面时打分器也跟着选错的问题
+        if(/翻唱|伴奏|[Ll]ive|现场|[Rr]emix|钢琴|纯音乐|深情|女声|男声|电音|R&B|串烧|合唱|英文版|日文版|吉他|Cover|cover|版/.test(name))score-=30;
+        // v1.13.0：明确标注"原唱"的版本加分（通常即正确版本）
+        if(/原唱/.test(name))score+=25;
         return {it:it,score:score,idx:idx};
     }).sort(function(a,b){return b.score-a.score||a.idx-b.idx;}).map(function(x){return x.it;});
 }
@@ -896,7 +933,7 @@ function muResolveBest(entries, timeout){
     });
 }
 var muSearchCache={};
-var MU_CACHE_TTL=10*60*1000;   // 搜索结果缓存 10 分钟
+var MU_CACHE_TTL=2*60*1000;   // v1.13.0：直链是限时签名 URL，原 10 分钟缓存会命中死链 → 2 分钟
 var MU_CACHE_MAX=200;          // 缓存条目上限
 function muCacheGet(key){
     var e=muSearchCache[key];
@@ -909,6 +946,7 @@ function muCacheSet(key,hits){
     var ks=Object.keys(muSearchCache);
     if(ks.length>MU_CACHE_MAX)delete muSearchCache[ks[0]];
 }
+function muCacheDel(key){ try{ delete muSearchCache[key]; }catch(e){} } // v1.13.0：缓存失效清理
 /* ===== v1.11.0 引擎健康度自适应：成败/耗时写入 localStorage，
    10 分钟内连挂 3 次的引擎自动跳过；qijieya 等偶发抽风源不再拖慢每次搜索 ===== */
 var MU_HEALTH_KEY='nico-mu-health-v1';
@@ -952,6 +990,16 @@ function muConfirmSlow(cleanQ,artist){
         setTimeout(function(){res(got);},10000);
     });
 }
+// v1.13.0：本地兜底 muCleanQuery（原依赖 nicoPhone 扩展的全局函数，
+// nicoPhone 未加载/加载顺序不同会导致整个搜索 ReferenceError 静默失败）
+var muCleanQuery = (typeof window.muCleanQuery === 'function')
+    ? window.muCleanQuery
+    : function(q){
+        q = String(q || '');
+        q = q.replace(/[（(]([^）)]*)[)）]/g, ' $1 ');
+        q = q.replace(/\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]/g, ' ').replace(/\[by:[^\]]*\]/gi, ' ').replace(/\[.*?\]/g, ' ');
+        return q.replace(/[^\w\u4e00-\u9fa5\s.-]/g, ' ').replace(/\s+/g, ' ').trim();
+    };
 // 多引擎并行收集可播结果，返回结果数组（不去重不自动进歌单）
 function muResolveMulti(query,artist,onProgress){
     var cleanQ=muCleanQuery(query);
@@ -960,9 +1008,23 @@ function muResolveMulti(query,artist,onProgress){
     var cacheKey=(cleanQ+'|'+wantArt).toLowerCase();
     var cached=muCacheGet(cacheKey);
     if(cached){
+        var c0=cached[0];
+        // v1.13.0：缓存命中先复验首条 URL（gdstudio 直链是限时签名，旧缓存可能已死）
+        if(c0&&c0.url){
+            return muCheckUrlFast(c0.url,2500).then(function(ok){
+                if(!ok){ muCacheDel(cacheKey); return muResolveMultiFresh(cleanQ,wantArt,onProgress); }
+                if(onProgress)cached.forEach(function(h,idx){setTimeout(function(){onProgress(h,idx+1,cached.length,null,true);},idx*25);});
+                return cached.slice();
+            });
+        }
         if(onProgress)cached.forEach(function(h,idx){setTimeout(function(){onProgress(h,idx+1,cached.length,null,true);},idx*25);});
         return Promise.resolve(cached.slice());
     }
+    return muResolveMultiFresh(cleanQ,wantArt,onProgress);
+}
+// v1.13.0：真正的多引擎搜索主体（缓存未命中 / 缓存失效后走这里）
+function muResolveMultiFresh(cleanQ,wantArt,onProgress){
+    var cacheKey=(cleanQ+'|'+wantArt).toLowerCase();
     // base 越小优先级越高（对齐参考代码"网易云优先"的策略），结果按 pri 排序展示；
     // v1.11.0：带 key 的引擎参与健康度自适应，故障引擎直接跳过
     var enginesBase=[
@@ -977,20 +1039,39 @@ function muResolveMulti(query,artist,onProgress){
     enginesBase.forEach(function(e){ if(!muHealthIsBad(e.key)) engines.push({name:e.name,base:e.base,fn:muTimedEngine(e.key,e.fn)}); });
     if(!engines.length){ engines=enginesBase.map(function(e){ return {name:e.name,base:e.base,fn:muTimedEngine(e.key,e.fn)}; }); } // 全挂也再试一次（可能已恢复）
     return new Promise(function(resolve){
-        var results=[],finished=0,seen={},settled=false,graceTimer=null;
+        var results=[],finished=0,seen={},settled=false,graceTimer=null,firstHitAt=0;
+        var PRIORITY_WAIT=3500; // v1.13.0：更高优先级引擎的等待窗口
         function cacheNow(){ if(results.length){ muCacheSet(cacheKey,results.slice()); } }
+        // v1.13.0：已到结果中优先级最高的引擎 base（pri = base*100 + 引擎内排名）
+        function minBaseArrived(){
+            var b=Infinity;
+            for(var i=0;i<results.length;i++){ var bb=Math.floor((results[i].pri||0)/100); if(bb<b)b=bb; }
+            return b;
+        }
+        // v1.13.0：是否仍有更高优先级引擎在途
+        function higherPriInFlight(){
+            var cur=minBaseArrived();
+            if(cur===Infinity)return false;
+            for(var i=0;i<engines.length;i++){
+                if(!engines[i].done && engines[i].base < cur) return true;
+            }
+            return false;
+        }
         function settle(){
-            if(settled)return; settled=true;
+            if(settled)return;
+            // v1.13.0：已有结果但更高优先级引擎仍在途且等待未超时 → 继续等，
+            // 慢但对（网易云系）绝不让快但错（QQ/酷狗换源）抢位
+            if(results.length && higherPriInFlight() && (Date.now()-firstHitAt) < PRIORITY_WAIT) return;
+            settled=true;
             if(graceTimer)clearTimeout(graceTimer);
             if(results.length){
-                // v1.11.0 先到先得：首个引擎命中立即上屏（对齐参考实现速度），
-                // 后台再收 2.5s 补充候选充实缓存，期间结果仍渐进追加到列表
                 resolve(results.slice());
                 graceTimer=setTimeout(function(){
                     cacheNow();
-                    muAbortAll(); // 结算完成，中止其余在途搜索请求
+                    // v1.13.0：不再 muAbortAll 中止在途——晚到的正确结果仍会追加进 UI；
+                    // 在途请求自带超时，且新搜索发起时 doSearch 会统一中止上一轮
                     if(onProgress)onProgress(null,results.length,engines.length,null,true);
-                },2500);
+                },3000);
                 return;
             }
             // 全部引擎快检未命中 → 慢速复核，避免网络抖动误判"未找到"
@@ -1006,14 +1087,17 @@ function muResolveMulti(query,artist,onProgress){
                 if(hit.pri===undefined)hit.pri=0;
                 hit.pri=eng.base*100+(hit.pri||0); // 全局相关度：引擎优先级 × 引擎内排名
                 results.push(hit);
+                if(!firstHitAt)firstHitAt=Date.now();
                 if(onProgress)onProgress(hit,results.length,engines.length);
                 if(!settled)settle();
             }
         }
         engines.forEach(function(eng){
+            eng.done=false;
             eng.fn().then(function(hit){ if(hit)pushHit(eng,hit); })
                 .catch(function(){})
                 .finally(function(){
+                    eng.done=true;
                     finished++;
                     if(finished===engines.length&&!settled)settle();
                 });
@@ -1073,17 +1157,19 @@ async function muSearchGD(source,query,artist,checkTimeout){
         var sr=await muFetch(MUSIC_API+'?types=search&count=8&source='+source+'&name='+encodeURIComponent(fullQ),4500).then(function(r){return r.json();});
         if(!sr||!sr.length)return null;
         var ranked=muRank(sr,fullQ,artist);
-        // 候选池 = 引擎原生第一候选（等同参考代码信任原生排序）∪ 打分前5，pri 越小越优先
+        // v1.13.0：候选池改为按打分排序（不再强制"原生第一候选永远优先"——它就是
+        // 翻唱/深情版重灾区）；原生第一候选降级为打分前 5 之外的末位兜底（pri=99），
+        // muRaceCheck 只在打分候选全部不可播时才会轮到它
         var pool=[],seenP={};
         function pushP(it,pri){ var k=(it.id||it.name||'')+''; if(!seenP[k]){ seenP[k]=1; pool.push({it:it,pri:pri}); } }
-        if(sr[0])pushP(sr[0],0);
         ranked.slice(0,5).forEach(function(it,ri){ pushP(it,ri+1); });
+        if(sr[0] && !seenP[(sr[0].id||sr[0].name||'')+'']) pushP(sr[0],99);
         var got=(await Promise.all(pool.map(function(p){ return muGdItemUrl(source,p.it).then(function(r){ if(r)r.pri=p.pri; return r; }).catch(function(){return null;}); }))).filter(Boolean);
-        // v1.11.0：netease 追加 injahow Meting 直链候选（302→CDN 真实音频流，实测可用），
-        // 与 iarc/gdstudio 形成三路取链，不再单一依赖某一路
+        // v1.13.0：injahow meting 直链候选降为末位兜底（pri=99，实测当前返回空），
+        // 避免它在 muRaceCheck 中挡在打分候选前面白白等超时
         if(source==='netease'&&pool.length){
             var top=pool[0];
-            got.push({url:'https://api.injahow.cn/meting/?server=netease&type=url&id='+encodeURIComponent(top.it.id),item:top.it,pri:top.pri+0.05});
+            got.push({url:'https://api.injahow.cn/meting/?server=netease&type=url&id='+encodeURIComponent(top.it.id),item:top.it,pri:99});
         }
         if(!got.length)return null;
         return await muRaceCheck(got,function(g){return {url:g.url,name:g.item.name,artist:g.item.artist||g.item.author||'',source:source,id:g.item.id,pri:g.pri};},checkTimeout);
@@ -1146,6 +1232,35 @@ function muKugouSearchCandidates(query){
     });
 }
 // 用候选（歌名+歌手）去 gdstudio 换源搜可播歌曲
+// v1.13.0：换源强匹配工具——归一化比较歌名/歌手，防止"搜索入口对、出音源错"
+function muNormKey(s){ return String(s||'').toLowerCase().replace(/\s+/g,''); }
+function muStrongMatch(hit, qName, qArtist){
+    if(!hit || !hit.name) return false;
+    var qn = muNormKey(qName), hn = muNormKey(hit.name);
+    var hnBare = hn.replace(/[（(].*?[)）]/g,'');
+    var nameOk = qn && (hnBare === qn || hnBare.indexOf(qn) >= 0 || qn.indexOf(hnBare) >= 0);
+    if(!nameOk) return false;
+    if(qArtist){
+        var ha = muNormKey(hit.artist||'');
+        var qa = muNormKey(qArtist);
+        if(ha && qa){
+            var qParts = qa.split(/[\/、,&，,]/).filter(Boolean);
+            // 歌手命中：歌手字段命中，或歌手出现在歌名里（如"晴天 (原唱 周杰伦)"）
+            var hitPart = qParts.some(function(t){ return t && (ha.indexOf(t) >= 0 || muNormKey(hit.name).indexOf(t) >= 0); });
+            if(!hitPart) return false;
+        }
+    }
+    return true;
+}
+// v1.13.0：从多结果中挑选"与目标歌名/歌手强匹配"的最优者（按相关度），配不到返回 null
+function muPickBestMatch(hits, name, artist){
+    if(!hits || !hits.length) return null;
+    var sorted = hits.slice().sort(function(a,b){ return (a.pri||0) - (b.pri||0); });
+    for(var i=0;i<sorted.length;i++){
+        if(muStrongMatch(sorted[i], name, artist)) return sorted[i];
+    }
+    return null;
+}
 async function muSearchByCandidates(cands, fallbackQ, tag, artist){
     if(!cands || !cands.length) return null;
     var SRC3=['netease','kuwo','joox'];
@@ -1168,6 +1283,8 @@ async function muSearchByCandidates(cands, fallbackQ, tag, artist){
         jobs.push({pri:9, p:muSearchQijieya(fallbackQ,artist).catch(function(){return null;})});
     }
     var pairs=await Promise.all(jobs.map(function(j){ return j.p.then(function(h){ return {pri:j.pri, h:h}; }); }));
+    // v1.13.0：换源结果必须与用户原始查询（fallbackQ）强匹配，配不到直接丢弃（宁缺毋滥，杜绝换错歌）
+    pairs = pairs.filter(function(p){ return !p.h || muStrongMatch(p.h, fallbackQ, artist); });
     pairs.sort(function(a,b){ return a.pri - b.pri; });
     for(var k=0; k<pairs.length; k++){
         if(pairs[k].h){
@@ -1343,20 +1460,24 @@ async function nicoFetchPlaylistData(pid){
 // meting 持久 302 直链（injahow/qijieya）并行兜底，gdstudio 短效链最后兜底。
 // v1.12.2：不再让 meting 试听短轨先通过而"听不完"——iarc 可播即用全长；
 // iarc 失效时在其余可播候选中优先"已知时长更长"者（全长 > 试听短轨）
+// v1.13.0：gdstudio 直链纳入并行批次（2026-09 实测 iarc/injahow/qijieya 全部返回空，
+// gdstudio 按 ID 取链是当前唯一实际可用的直链通道）；整体失败后重试一次抗瞬时抖动
 async function nicoResolveByNeteaseId(id){
     if(!id) return '';
     var enc = encodeURIComponent(id);
-    var hit = await muResolveBest([
-        {name:'iarc',    pri:0, get:function(){ return muIarcUrl(id); }},
-        {name:'injahow', pri:1, get:function(){ return Promise.resolve('https://api.injahow.cn/meting/?server=netease&type=url&id=' + enc); }},
-        {name:'qijieya', pri:2, get:function(){ return Promise.resolve('https://api.qijieya.cn/meting/?server=netease&type=url&id=' + enc); }}
-    ], 3000);
+    function batch(){
+        return muResolveBest([
+            {name:'iarc',    pri:0, get:function(){ return muIarcUrl(id); }},
+            {name:'injahow', pri:1, get:function(){ return Promise.resolve('https://api.injahow.cn/meting/?server=netease&type=url&id=' + enc); }},
+            {name:'qijieya', pri:2, get:function(){ return Promise.resolve('https://api.qijieya.cn/meting/?server=netease&type=url&id=' + enc); }},
+            {name:'gdstudio',pri:3, get:function(){ return muFetch(MUSIC_API + '?types=url&source=netease&id=' + enc + '&br=320', 6000).then(function(r){ return r.json(); }).then(function(j){ return (j && j.url) || ''; }).catch(function(){ return ''; }); }}
+        ], 3000);
+    }
+    var hit = await batch();
     if(hit) return hit;
-    // gdstudio 短效链兜底
-    try{
-        var gd = await muFetch(MUSIC_API + '?types=url&source=netease&id=' + enc + '&br=320', 6000).then(function(r){ return r.json(); });
-        if(gd && gd.url){ var okG = await muCheckUrlDur(gd.url, 3000); if(okG) return gd.url; }
-    }catch(e){}
+    // v1.13.0：一次性重试，抗第三方 API 瞬时抖动
+    hit = await batch();
+    if(hit) return hit;
     return '';
 }
 // 歌曲失效重解析：有 sid 优先按原 ID 精确修复（不误配翻唱），无 sid 退回按歌名搜
@@ -1381,8 +1502,13 @@ async function nicoReResolve(s){
         return null;
     }
     // 无 ID（旧数据）：退回按歌名+歌手搜索
+    // v1.13.0：必须强匹配——原代码直接取 hits[0]（到达顺序第一名），
+    // 慢但对的正确版本没到时会被快但错的翻唱抢先，导致"莫名其妙换成其它歌"
     var hits = await muResolveMulti(s.name, s.artist || '');
-    if(hits && hits.length) return { name: hits[0].name, artist: hits[0].artist || s.artist, url: hits[0].url, sid: hits[0].id || '', src: hits[0].source || '' };
+    if(hits && hits.length){
+        var pick = muPickBestMatch(hits, s.name, s.artist);
+        if(pick) return { name: pick.name, artist: pick.artist || s.artist, url: pick.url, sid: pick.id || '', src: pick.source || '' };
+    }
     return null;
 }
 // 单曲解析（歌单导入用）：优先按 ID 拿持久直链，其次 meting 自带 url，最后退回搜索
@@ -1398,7 +1524,9 @@ async function nicoResolveTrack(t){
     if(!t.name) return null;
     try{
         var got = await muSearchGD('netease', t.name, t.artist);
-        if(got) return { name: got.name, artist: got.artist || t.artist, url: got.url, sid: got.id || '', src: got.source || 'netease' };
+        // v1.13.0：按歌名+歌手搜索的兜底结果必须强匹配，配到翻唱/错版本宁可判失败，
+        // 不再把"晴天(深情版)"之类的错歌混进导入的歌单
+        if(got && muStrongMatch(got, t.name, t.artist)) return { name: got.name, artist: got.artist || t.artist, url: got.url, sid: got.id || '', src: got.source || 'netease' };
     }catch(e){}
     return null;
 }
@@ -1477,7 +1605,7 @@ async function nicoImportPlaylist(){
         buildList();
         if(added){ cIdx = Math.max(0, playlist.length - added); loadP(); }
         else if(curRefreshed){ loadP(); if(!au.paused){ try{ pPlay(); }catch(e){} } } // 正在播的被刷新 → 换新源续播
-        nicoShowToast('导入完成：新增 ' + added + ' 首' + (refreshed ? '，刷新 ' + refreshed + ' 首' : '') + (failed ? '，失败 ' + failed : ''));
+        nicoShowToast('导入完成：新增 ' + added + ' 首' + (refreshed ? '，刷新 ' + refreshed + ' 首' : '') + (failed ? '，失败 ' + failed + ' 首（未混入错版本，可重导重试）' : ''));
     }catch(e){
         nicoShowToast('歌单导入失败');
     }finally{
