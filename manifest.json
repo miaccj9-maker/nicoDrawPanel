@@ -1,8 +1,8 @@
 {
     "display_name": "Nico Draw Panel",
     "author": "nicole",
-    "description": "nico 系列角色抽屉面板：沉浸式交互，仅从页面顶部向下拉展开角色资料卡（头像/名称/身高/年龄/简介/高光相册）+ 音乐播放器（搜歌名/歌手搜歌、曲目列表/定时暂停/切歌）+ 图片墙，底部拖拽条收起。已移除全域文本阅读器（STORY ARCHIVE）与悬浮按钮。",
-    "version": "1.14.1",
+    "description": "nico 系列角色抽屉面板：沉浸式交互，仅从页面顶部向下拉展开角色资料卡（头像/名称/身高/年龄/简介/高光相册）+ 音乐播放器（搜歌名/歌手搜歌、曲目列表/定时暂停/切歌、歌单中心：自动读取全部角色分立角色歌单 + 自建歌单、歌曲一键加入歌单、网易云歌单导入）+ 图片墙，底部拖拽条收起。v1.17.0 起第二页完整并入「聊天存档管理器」（按角色归档/备注/存档专属头像/一键加载，黑白极简风格）。",
+    "version": "1.17.0",
     "js": "nicoDrawPanel.js",
     "homePage": "https://github.com/miaccj9-maker/nicoDrawPanel",
     "auto_update": true
