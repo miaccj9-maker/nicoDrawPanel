@@ -1,5 +1,5 @@
-/* nico Draw Panel (Nico Draw Panel) - SillyTavern Extension v1.17.0
-   角色抽屉面板：从屏幕顶部下拉展开角色资料卡 + 音乐播放器 + 图片库 + 弹幕歌词。
+/* nico Draw Panel (Nico Draw Panel) - SillyTavern Extension v1.21.0
+   角色抽屉面板：从屏幕顶部下拉展开角色资料卡 + 音乐播放器 + 图片库 + 顶部栏横向歌词条。
    所有样式类名 / ID / 全局变量统一使用 nico 前缀（nico-* / Nico-* / __nico_*），
    与 nicoPhone 系列组件保持命名一致，避免与其他扩展的旧前缀类名冲突。
    音乐播放器支持"搜歌名/歌手搜歌"（多引擎兜底搜索，自动校验可播直链）。
@@ -175,16 +175,54 @@
      · 识别服务为公共实例，可在 NICO_ID_API 常量处替换为自建 NeteaseCloudMusicApi；
        网易官方识别 API 无 CORS 头，公共实例已开放 CORS。
    已移除原组件中的"全域文本阅读器"(STORY ARCHIVE / MutationObserver 文本捕获)。
-   v1.17.0 合并聊天存档管理器（2026-10-01）：
-     · 面板底部新增「主页 / 存档」极简页签，聊天存档管理器作为第二页完整并入，
-       统一黑白主题变量 + 24x24 SVG 极简图标，支持「恢复初始配色」；
-     · 存档功能与独立版 v1.3.0 完全一致（按角色归档/备注/存档专属头像/一键加载/
-       数量懒加载/并发限流 5/请求超时 20s/列表缓存/渲染串行化），设置键不变，旧数据保留；
-     · 首次进入存档页才发起请求，启动零开销；音乐搜索与听歌识曲逻辑零改动。
+   v1.18.0 存档功能迁出（2026-11-06）：
+     · 聊天存档管理器（按角色归档 / 备注 / 存档专属头像 / 一键加载 / ＋新聊天 /
+       数量懒加载 / 并发限流 5 / 请求超时 20s / 列表缓存 / 渲染串行化）整体迁至
+       「快捷指令面板」，按其原有存储键 chat-archive-manager 无缝继承旧备注与头像；
+     · 本面板移除「主页 / 存档」页签及存档页 DOM / 样式 / 逻辑，主面板改为单页铺满；
+     · 心理文本(em)点击显隐原挂在存档模块 init 内，现独立保留在本面板初始化中；
+     · 音乐搜歌、听歌识曲、歌单中心、弹幕歌词、图片库逻辑零改动。
+   v1.21.0 歌词常驻时隐藏顶栏图标（2026-11-06）：
+     · 有歌词在放、且没在跟顶栏图标互动时，顶栏 9 个图标整体淡隐（0.22s），
+       顶栏那一行只留歌词；只是把透明度归零，热区与点击一律保留
+       （不像 v1.19.0 那样 pointer-events:none 把图标点废）；
+     · 点任意图标：歌词立刻淡出让位、图标同时淡回可见，抽屉照常展开；
+       抽屉关掉或点了顶栏以外的地方后，歌词淡回、图标重新淡隐；
+     · 歌词条与图标由同一个 suspended 状态驱动；没在播放 / 没拉到歌词 /
+       关掉歌词时图标照常显示；
+     · 长句跑马灯改用 WAAPI 单段线性动画：轨道先滑到左边缘，该句再按字量横移，
+       播完停在末尾，换句自动取消并复位；
+     · 其余（搜歌 / 听歌识曲 / 歌单 / 图片库 / 手势 / 歌词拉取）零改动。
+   v1.20.0 顶部栏横向歌词（2026-11-06）：
+     · 不再改动顶部栏高度（删除 v1.19.0 抬高 --topBarBlockSize 的做法），
+       歌词条直接铺在顶栏那一行里，聊天区位置、顶栏布局一律不动；
+     · 歌词改为单行横向滚动：短句居中显示，超宽长句从左边缘起步按字量线性横移，
+       换句时整排平滑横移到新句，随播放进度逐句推进；
+     · 顶部栏图标照常显示、照常可点：歌词条整条 pointer-events:none，
+       图标提到歌词之上（z-index），点图标永远落在图标本身；
+     · 点顶部栏图标时歌词立刻淡出（.suspend），抽屉关掉/点了顶栏以外后自动淡回，
+       避免文字压在图标上干扰观感；
+     · 歌词条底色透明、沿用顶栏主题底色，字号按顶栏高度收口（默认 20 号在 40px 顶栏里正好），
+       并保留颜色 / 不透明度 / 彩虹 / 字号 / 恢复默认全部设置；
+     · 歌词拉取（按歌曲 ID 精确拉取 + 歌名兜底）与搜歌、听歌识曲、歌单逻辑零改动。
+   v1.19.0 歌词迁入顶部栏（2026-11-06）：
+     · 原"浮动可拖拽弹幕歌词"改为「顶部栏歌词条」：歌词条直接放进酒馆顶部栏
+       (#top-settings-holder) 内，宽度与顶部栏一致，不再悬浮在正文中间遮挡聊天；
+     · 打开歌词（弹幕开关=开）时自动隐藏顶部栏的元素图标（AI 配置 / 系统设置 /
+       扩展等抽屉图标透明度归零且不可点击），关掉歌词立刻原样恢复；
+     · 歌词条高度随字号自适应（默认约 3 行高，默认字号 20 时约 88px），
+       通过临时覆盖 --topBarBlockSize 让聊天区顺延下移，歌词不会压住任何内容，
+       关闭歌词时移除该覆盖，布局原样还原；
+     · 歌词改为整列滚动：上一句 / 当前句 / 下一句同屏，当前句高亮放大，
+       随播放进度平滑上移到正中（timeupdate 驱动 + 900ms 兜底轮询，
+       暂停/刚加载完歌词也能立刻对齐）；
+     · 顶部栏下拉手势热区随歌词条高度同步放大，歌词开启时依然能在顶部下拉展开面板；
+     · 原歌词颜色 / 字号 / 不透明度 / 彩虹渐变 / 恢复默认设置项全部保留并作用于歌词条；
+     · 歌词拉取（按歌曲 ID 精确拉取 + 歌名兜底）与搜歌、听歌识曲、歌单逻辑零改动。
    所有 DOM 直接注入酒馆主页面，无 iframe 间接层。 */
 (function(){
 'use strict';
-try{console.log('%c[Nico-Draw-Panel] v1.17.0 已加载：歌单中心·存档第二页','color:#818cf8;font-weight:bold');}catch(e){}
+try{console.log('%c[Nico-Draw-Panel] v1.21.0 已加载：顶部栏横向歌词（不改顶栏高度，有歌词时图标淡隐、点图标歌词让位）','color:#818cf8;font-weight:bold');}catch(e){}
 
 var CSS_ID='Nico-Draw-Style', PANEL_ID='Nico-Draw-Panel';
 
@@ -293,12 +331,24 @@ var CSS = `
 .nico-av-bx[data-edit]{cursor:pointer;}
 .nico-toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%) translateY(8px);background:var(--SmartThemeBlurTintColor,rgba(0,0,0,0.78));color:var(--SmartThemeBodyColor,#fff);font-size:12px;padding:7px 16px;border-radius:18px;z-index:100000;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;}
 .nico-toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-/* 弹幕歌词透明模块：固定在酒馆界面上层，透明只有歌词，可随意拖动 */
-.nico-lyric-mod{position:fixed;top:120px;left:50%;transform:translateX(-50%);z-index:11001;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;width:auto;max-width:92vw;}
-.nico-lyric-mod.hidden{display:none;}
-.nico-lyric-mod .nico-lyr-prev{font-size:12px;color:var(--SmartThemeBodyColor,#fff);opacity:.55;margin-bottom:4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px rgba(0,0,0,.5);}
-.nico-lyric-mod .nico-lyr-cur{font-size:20px;font-weight:600;color:var(--SmartThemeBodyColor,#fff);text-shadow:0 1px 3px rgba(0,0,0,.55),0 0 8px rgba(0,0,0,.25);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;letter-spacing:1px;text-align:center;transition:color .2s;}
-.nico-lyric-mod .nico-lyr-cur.gradient{background:linear-gradient(90deg,#ff6b6b,#feca57,#48dbfb,#ff9ff3);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:none;}
+/* 顶部栏歌词条（v1.20.0）：不改顶栏高度，歌词以单行横向滚动叠在顶栏里，位于图标下层；
+   歌词条 pointer-events:none（顶部栏图标照常可见、可点），点图标时歌词临时淡出（.suspend）。 */
+.nico-lyr-tb{position:absolute;left:0;top:0;width:100%;height:100%;z-index:0;pointer-events:none;overflow:hidden;display:flex;align-items:center;box-sizing:border-box;background:transparent;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;transition:opacity .22s ease;}
+.nico-lyr-tb.suspend{opacity:0!important;}
+.nico-lyr-tb.is-float{position:fixed;top:0;left:0;width:100%;height:auto;min-height:44px;background:var(--SmartThemeBlurTintColor,#fff);border-bottom:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,.08));box-shadow:0 2px 14px rgba(0,0,0,.06);}
+.nico-lyr-tb-vp{position:relative;width:100%;height:100%;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,rgba(0,0,0,0) 0%,#000 5%,#000 95%,rgba(0,0,0,0) 100%);mask-image:linear-gradient(90deg,rgba(0,0,0,0) 0%,#000 5%,#000 95%,rgba(0,0,0,0) 100%);}
+.nico-lyr-tb-list{position:absolute;left:0;top:0;height:100%;display:flex;align-items:center;white-space:nowrap;will-change:transform;transform:translate3d(0,0,0);transition:transform .5s cubic-bezier(.22,.61,.36,1);}
+.nico-lyr-tb-line{display:flex;align-items:center;height:100%;margin:0 13px;white-space:nowrap;color:var(--SmartThemeBodyColor,#111);font-size:calc(var(--nico-lyr-size,20px) * .62);opacity:.26;letter-spacing:.4px;transition:opacity .3s cubic-bezier(.22,.61,.36,1);}
+.nico-lyr-tb-line.on{font-size:var(--nico-lyr-size,20px);font-weight:600;opacity:var(--nico-lyr-op,1);color:var(--nico-lyr-color,#fff);text-shadow:0 1px 2px rgba(0,0,0,.15);}
+.nico-lyr-tb-line.on.gradient{background:linear-gradient(90deg,#ff6b6b,#feca57,#48dbfb,#ff9ff3);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:none;}
+/* 歌词显示时把顶部栏图标抬到歌词之上：图标始终清晰可见，点击永远落在图标上 */
+#top-settings-holder.nico-lyr-tb-on > .drawer > .drawer-toggle,
+#top-settings-holder.nico-lyr-tb-on > .drawer > .drawer-toggle > .drawer-icon,
+#top-settings-holder.nico-lyr-tb-on > :not(.drawer):not(.nico-lyr-tb){position:relative;z-index:2;}
+/* 有歌词且没在点图标时，顶栏图标整体淡隐：只淡外观，热区与点击一律保留，
+   点图标时（.nico-lyr-tb-icons-off 摘掉）图标立刻淡回来、歌词让位。 */
+#top-settings-holder.nico-lyr-tb-on > .drawer > .drawer-toggle > .drawer-icon{transition:opacity .22s ease;}
+#top-settings-holder.nico-lyr-tb-on.nico-lyr-tb-icons-off > .drawer > .drawer-toggle > .drawer-icon{opacity:0!important;}
 /* 弹幕设置面板（组件面板内） */
 .nico-danmu-set{margin:0 16px 16px;border:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,0.08));border-radius:12px;background:var(--SmartThemeChatTintColor,#fefefe);flex-shrink:0;overflow:hidden;}
 .nico-danmu-hd{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--SmartThemeBodyColor,#111);}
@@ -465,79 +515,6 @@ var CSS = `
 #Nico-Draw-Panel.nico-theme-reset .nico-pl-row{background:#fefefe;}
 #Nico-Draw-Panel.nico-theme-reset .nico-pl-pick-card,#Nico-Draw-Panel.nico-theme-reset .nico-pl-modal-card{background:#ffffff;}
 #Nico-Draw-Panel.nico-theme-reset .nico-pl-pick-in,#Nico-Draw-Panel.nico-theme-reset .nico-pl-modal-in{background:#f0f0f2;color:#222222;}
-/* ===== v1.17.0 第二页：底部极简页签 ===== */
-.nico-tabs{flex-shrink:0;display:flex;border-top:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,.08));background:var(--SmartThemeBlurTintColor,#fff);padding-bottom:env(safe-area-inset-bottom,0px);position:relative;z-index:5;}
-.nico-tab{flex:1;border:none;background:transparent;color:var(--SmartThemeBodyColor,#111);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:50px;font-size:10px;font-weight:600;letter-spacing:.5px;opacity:.4;cursor:pointer;transition:opacity .2s;font-family:inherit;padding:0;line-height:1;}
-.nico-tab svg{width:20px;height:20px;fill:currentColor;display:block;}
-.nico-tab:active{opacity:.8;}
-.nico-tab.on{opacity:1;}
-/* ===== v1.17.0 聊天存档页（黑白极简，风格与主页一致） ===== */
-.nico-arc{display:none;flex:1 1 0;min-height:0;flex-direction:column;}
-.nico-arc.show{display:flex;}
-.nico-arc-nav{position:relative;display:flex;align-items:center;justify-content:center;height:50px;border-bottom:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,.12));font-weight:700;font-size:15px;flex-shrink:0;margin-top:10px;padding-top:env(safe-area-inset-top,0px);box-sizing:content-box;}
-.nico-arc-rf{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:none;border-radius:8px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:.5;transition:opacity .2s,background .2s;padding:0;}
-.nico-arc-rf:hover{opacity:.9;background:rgba(0,0,0,.05);}
-.nico-arc-rf:active{transform:translateY(-50%) scale(.9);}
-.nico-arc-rf svg{width:16px;height:16px;fill:var(--SmartThemeBodyColor,#111);display:block;}
-.nico-arc-rf.spin svg{animation:nicoArcSpin .8s linear infinite;}
-@keyframes nicoArcSpin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
-.nico-arc-scroll{flex:1 1 0;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:10px 16px calc(20px + env(safe-area-inset-bottom,0px));}
-.nico-arc-stats{font-size:11px;opacity:.55;margin:0 2px 8px;}
-.nico-arc-filter{margin:0 0 10px;}
-.nico-arc-filter input{width:100%;box-sizing:border-box;background:var(--SmartThemeChatTintColor,#f0f0f2);border:none;border-radius:10px;padding:8px 12px;font-size:12px;color:var(--SmartThemeBodyColor,#222);outline:none;transition:box-shadow .2s;font-family:inherit;}
-.nico-arc-filter input:focus{box-shadow:inset 0 0 0 1px var(--SmartThemeBorderColor,rgba(0,0,0,.12));}
-.nico-arc-filter input::placeholder{color:var(--SmartThemeBodyColor,#000);opacity:.42;}
-.nico-arc-list{display:flex;flex-direction:column;gap:8px;}
-.nico-arc-empty{font-size:12px;opacity:.55;padding:18px 10px;border:1px dashed var(--SmartThemeBorderColor,rgba(0,0,0,.15));border-radius:12px;text-align:center;}
-.nico-arc-loading{font-size:12px;opacity:.55;text-align:center;padding:14px 0;}
-/* 角色档案夹 */
-.nico-arc-char{border:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,.1));border-radius:12px;overflow:hidden;background:var(--SmartThemeChatTintColor,rgba(255,255,255,.6));}
-.nico-arc-head{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;-webkit-user-select:none;}
-.nico-arc-head:active{background:rgba(0,0,0,.03);}
-.nico-arc-cv{width:14px;height:14px;flex-shrink:0;opacity:.55;transition:transform .2s;display:flex;align-items:center;justify-content:center;}
-.nico-arc-cv svg{width:14px;height:14px;fill:var(--SmartThemeBodyColor,#111);display:block;}
-.nico-arc-char.nico-open .nico-arc-cv{transform:rotate(90deg);}
-.nico-arc-nm{flex:1;min-width:0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.nico-arc-badge{flex-shrink:0;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;border:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,.18));opacity:.85;font-variant-numeric:tabular-nums;}
-.nico-arc-body{display:none;max-height:330px;overflow-y:auto;border-top:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,.08));padding:8px;flex-direction:column;gap:6px;}
-.nico-arc-char.nico-open .nico-arc-body{display:flex;}
-/* 存档卡片 */
-.nico-arc-chat{border:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,.1));border-radius:10px;padding:8px 10px;background:var(--SmartThemeBlurTintColor,#fff);display:flex;flex-direction:column;}
-.nico-arc-chat.nico-cur{border-color:var(--SmartThemeBodyColor,#111);}
-.nico-arc-avrow{display:flex;align-items:center;gap:6px;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,.08));}
-.nico-arc-avimg{width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;border:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,.12));background:var(--SmartThemeChatTintColor,#fafafa);}
-.nico-arc-avimg.nico-av-default{opacity:.85;}
-.nico-arc-avbtn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--SmartThemeBorderColor,rgba(0,0,0,.18));background:transparent;color:var(--SmartThemeBodyColor,#111);border-radius:10px;padding:3px 9px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;transition:transform .15s,background .15s,color .15s;}
-.nico-arc-avbtn svg{width:12px;height:12px;fill:currentColor;display:block;}
-.nico-arc-avbtn:active{transform:scale(.94);background:var(--SmartThemeBodyColor,#111);color:var(--SmartThemeBlurTintColor,#fff);}
-.nico-arc-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-.nico-arc-tt{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
-.nico-arc-sub{font-size:10.5px;opacity:.55;white-space:nowrap;}
-.nico-arc-curbadge{font-size:9px;font-weight:700;padding:1px 6px;border-radius:6px;background:var(--SmartThemeBodyColor,#111);color:var(--SmartThemeBlurTintColor,#fff);flex-shrink:0;}
-.nico-arc-load{margin-left:auto;border:none;background:var(--SmartThemeBodyColor,#111);color:var(--SmartThemeBlurTintColor,#fff);border-radius:10px;padding:4px 13px;font-size:10px;font-weight:700;letter-spacing:.5px;cursor:pointer;font-family:inherit;flex-shrink:0;transition:transform .15s,opacity .15s;}
-.nico-arc-load:active{transform:scale(.94);opacity:.85;}
-.nico-arc-pv{font-size:11px;opacity:.6;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.nico-arc-note{margin-top:6px;width:100%;box-sizing:border-box;background:var(--SmartThemeChatTintColor,#f0f0f2);border:none;border-radius:8px;padding:6px 9px;font-size:11px;color:var(--SmartThemeBodyColor,#222);outline:none;font-family:inherit;transition:box-shadow .2s;}
-.nico-arc-note:focus{box-shadow:inset 0 0 0 1px var(--SmartThemeBorderColor,rgba(0,0,0,.12));}
-.nico-arc-note::placeholder{color:var(--SmartThemeBodyColor,#000);opacity:.42;}
-/* 存档页固定黑白（恢复初始配色） */
-#Nico-Draw-Panel.nico-theme-reset .nico-tabs{background:#ffffff;border-top-color:#f0f0f0;}
-#Nico-Draw-Panel.nico-theme-reset .nico-tab{color:#111111;}
-#Nico-Draw-Panel.nico-theme-reset .nico-arc-nav{border-bottom-color:#e5e5e5;}
-#Nico-Draw-Panel.nico-theme-reset .nico-arc-rf svg{fill:#111111;}
-#Nico-Draw-Panel.nico-theme-reset .nico-arc-char{border-color:#eaeaea;background:#fefefe;}
-#Nico-Draw-Panel.nico-theme-reset .nico-arc-cv svg{fill:#111111;}
-#Nico-Draw-Panel.nico-theme-reset .nico-arc-badge{border-color:#d8d8d8;}
-#Nico-Draw-Panel.nico-theme-reset .nico-arc-body{border-top-color:#f0f0f0;}
-#Nico-Draw-Panel.nico-theme-reset .nico-arc-chat{border-color:#eaeaea;background:#ffffff;}
-#Nico-Draw-Panel.nico-theme-reset .nico-arc-chat.nico-cur{border-color:#111111;}
-#Nico-Draw-Panel.nico-theme-reset .nico-arc-avimg{border-color:#d8d8d8;background:#fafafa;}
-#Nico-Draw-Panel.nico-theme-reset .nico-arc-avbtn{border-color:#d8d8d8;color:#111111;}
-#Nico-Draw-Panel.nico-theme-reset .nico-arc-avbtn:active{background:#111111;color:#ffffff;}
-#Nico-Draw-Panel.nico-theme-reset .nico-arc-curbadge,#Nico-Draw-Panel.nico-theme-reset .nico-arc-load{background:#111111;color:#ffffff;}
-#Nico-Draw-Panel.nico-theme-reset .nico-arc-filter input,#Nico-Draw-Panel.nico-theme-reset .nico-arc-note{background:#f0f0f2;color:#222222;}
-#Nico-Draw-Panel.nico-theme-reset .nico-arc-filter input:focus,#Nico-Draw-Panel.nico-theme-reset .nico-arc-note:focus{box-shadow:inset 0 0 0 1px #d8d8d8;}
-#Nico-Draw-Panel.nico-theme-reset .nico-arc-empty{border-color:#d8d8d8;}
 `;
 
 /* ===== 1. 强力清除旧版注入与幽灵事件（扩展重载/对话多轮不叠加） ===== */
@@ -550,6 +527,14 @@ if (document._nicoDrawPanelHandlers) {
 }
 var oP=document.getElementById(PANEL_ID), oS=document.getElementById(CSS_ID);
 if(oP)oP.remove(); if(oS)oS.remove();
+/* v1.19.0：清掉上一轮实例残留在酒馆顶部栏里的歌词条 / 顶栏隐藏标记 / 顶栏高度覆盖，避免重载后叠加 */
+try{
+    var oLyrTB=document.getElementById('nico-lyr-tb');
+    if(oLyrTB) oLyrTB.remove();
+    var oTB=document.getElementById('top-settings-holder');
+    if(oTB) oTB.classList.remove('nico-lyr-tb-on');
+    if(window.__nicoTbVarSet){ document.body.style.removeProperty('--topBarBlockSize'); window.__nicoTbVarSet=false; }
+}catch(e){}
 
 var style=document.createElement('style');
 style.id=CSS_ID;
@@ -640,14 +625,6 @@ panel.innerHTML=`
       </div>
       <input type="file" id="nico-quick-file" accept="image/*" style="display:none">
     </div>
-    <div class="nico-arc" id="nico-arc">
-      <div class="nico-arc-nav"><span>聊天存档</span><button class="nico-arc-rf" id="nico-arc-refresh" type="button" title="刷新存档列表"><svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button></div>
-      <div class="nico-arc-scroll">
-        <div class="nico-arc-stats" id="nico-arc-stats">共 0 个角色</div>
-        <div class="nico-arc-filter"><input type="text" id="nico-arc-filter-in" placeholder="筛选角色 / 备注…" autocomplete="off"></div>
-        <div class="nico-arc-list" id="nico-arc-list"></div>
-      </div>
-    </div>
     <div class="nico-pl" id="nico-pl" data-view="center">
       <div class="nico-pl-view nico-pl-view-center">
         <div class="nico-pl-hd">
@@ -682,18 +659,33 @@ panel.innerHTML=`
       </div>
       <div class="nico-pl-modal" id="nico-pl-modal"></div>
     </div>
-    <div class="nico-tabs" id="nico-tabs">
-      <button class="nico-tab on" data-page="home" type="button" title="主页"><svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg><span>主页</span></button>
-      <button class="nico-tab" data-page="arc" type="button" title="聊天存档"><svg viewBox="0 0 24 24"><path d="M20.54 5.23l-1.39-1.68A1.49 1.49 0 0 0 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z"/></svg><span>存档</span></button>
-    </div>
     <div class="nico-drg" id="Nico-Draw-Close"><div class="nico-d-br"></div></div>
 `;
 document.body.appendChild(panel);
 
+/* ===== 心理文本(em)眼睛点击显隐（原随存档模块 init，迁出后独立保留） ===== */
+        /* 心理文本(em)眼睛点击显隐：document 级一次性事件委托，不遍历消息、不加 observer/定时器，零加载开销 */
+        (function(){
+            if(window.__nicoEmToggleBound) return; window.__nicoEmToggleBound = true;
+            try{
+                document.addEventListener('click', function(ev){
+                    var t = ev.target;
+                    if(!t || !t.closest) return;
+                    var em = t.closest('#chat .mes_block em, #chat .mes_text em');
+                    if(!em) return;
+                    em.classList.toggle('nico-em-show');
+                    ev.stopPropagation();
+                }, true);
+            }catch(err){}
+        })();
+
+
 /* ===== 3. 顶部下拉手势（防抖节流，唯一展开方式：从页面顶部向下拉） ===== */
 var sY=0, sX=0, isT=false, isM=false, ticking=false;
+/* v1.19.0：顶部栏热区随歌词条高度自适应（歌词开启时顶部栏更高，热区同步放大，仍可从顶部下拉展开面板） */
+var NICO_TOP_HOT=60;
 var handlers = {
-    ts: function(e){ try{ sY=e.touches[0].clientY; sX=e.touches[0].clientX; }catch(_e){ return; } isT=sY<=60; },
+    ts: function(e){ try{ sY=e.touches[0].clientY; sX=e.touches[0].clientX; }catch(_e){ return; } isT=sY<=NICO_TOP_HOT; },
     tm: function(e){
       if(!isT) return;
       if(!ticking) {
@@ -709,7 +701,7 @@ var handlers = {
         ticking = true;
       }
     },
-    md: function(e){ sY=e.clientY; sX=e.clientX; isT=sY<=60; isM=true; },
+    md: function(e){ sY=e.clientY; sX=e.clientX; isT=sY<=NICO_TOP_HOT; isM=true; },
     mm: function(e){
       if(!isM||!isT) return;
       if(!ticking) {
@@ -1122,7 +1114,7 @@ async function muGdItemUrl(source,item){
         // 避免 gdstudio 直链偶尔返回同名错轨导致"显示对、声音错"
         var gdP=muFetch(MUSIC_API+'?types=url&source=netease&id='+item.id+'&br=320',5200)
             .then(function(r){return r.json();})
-            .then(function(j){return (j&&j.url)||'';})
+            .then(function(j){ return (j&&j.url)||muFetch(MUSIC_API+'?types=url&source=netease&id='+item.id+'&br=128',4200).then(function(r2){return r2.json();}).then(function(j2){return (j2&&j2.url)||'';}).catch(function(){return '';}); })
             .catch(function(){return '';});
         var iu=await muIarcUrl(item.id), gu=await gdP;
         finalUrl=iu||gu;
@@ -1142,6 +1134,63 @@ async function muGdItemUrl(source,item){
 // "原唱"标记加分——修复 gdstudio 原生排序把翻唱放最前时打分器也跟着选错的问题
 // v1.14.0：繁→简映射提升为全局（muRank 打分与 muNormKey 强匹配共用）
 var muT2S={'傑':'杰','倫':'伦','劉':'刘','陳':'陈','張':'张','孫':'孙','楊':'杨','鄧':'邓','蘇':'苏','鄒':'邹','黃':'黄','吳':'吴','鄭':'郑','許':'许','謝':'谢','韓':'韩','馮':'冯','趙':'赵','蔣':'蒋','蕭':'萧','葉':'叶','羅':'罗','項':'项','鍾':'钟','鐘':'钟','譚':'谭','馬':'马','陸':'陆','萬':'万','賴':'赖','範':'范','龍':'龙','鳳':'凤','愛':'爱','國':'国','學':'学','樂':'乐','單':'单','雙':'双','東':'东','華':'华','麗':'丽','兒':'儿'};
+/*__MUART_BEGIN__*/
+/* v1.18.0 歌手外文/别名身份归一：netease 正版常把歌手写成英文艺名
+   （周杰伦=Jay、林俊杰=JJ Lin、陈奕迅=Eason、邓紫棋=G.E.M.…）。旧逻辑只按
+   中文比对，会在门槛里淘汰正版原唱，反让"歌名带歌手名"的翻唱中选。 */
+var muArtAlias={
+ '周杰伦':['周董','jay','jay chou','jaychou'],
+ '林俊杰':['jj','jj lin','jjlin','wayne','wayne lim'],
+ '陈奕迅':['eason','eason chan','easonchan'],
+ '邓紫棋':['g.e.m','gem','g.e.m.tang','gloria','gloria tang'],
+ '王力宏':['leehom','lee hom','wang leehom'],
+ '陶喆':['david tao','davidtao'],
+ '蔡依林':['jolin','jolin tsai','jolintsai'],
+ '孙燕姿':['stefanie','stefanie sun','stefaniesun'],
+ '王菲':['faye','faye wong','fayewong'],
+ '张学友':['jacky','jacky cheung','jackycheung'],
+ '刘德华':['andy','andy lau','andylau'],
+ '张国荣':['leslie','leslie cheung','lesliecheung'],
+ '李荣浩':['ronghao','li ronghao','ronghaoli'],
+ '薛之谦':['joker','joker xue','jokerxue'],
+ '田馥甄':['hebe','hebe tien','hetien'],
+ '萧敬腾':['jam','jam hsiao','jamhsiao'],
+ '潘玮柏':['wilber','wilber pan','willpan'],
+ '张韶涵':['angela','angela chang','angelachang'],
+ '杨丞琳':['rainie','rainie yang'],
+ '梁静茹':['fish','fish leong','fishleong'],
+ '周兴哲':['eric','eric chou','ericchou'],
+ '五月天':['mayday']
+};
+var muArtAliasRev=null;
+function muArtSpace(s){ return String(s||'').toLowerCase().split('').map(function(c){return muT2S[c]||c;}).join('').replace(/[-_'、,&，,/]+/g,' ').replace(/\s+/g,' ').trim(); }
+function muArtBuildRev(){
+  if(muArtAliasRev) return muArtAliasRev;
+  var rev={};
+  Object.keys(muArtAlias).forEach(function(canon){
+    [canon].concat(muArtAlias[canon]||[]).forEach(function(x){ rev[muNormKey(x)]=canon; rev[muArtSpace(x)]=canon; });
+  });
+  muArtAliasRev=rev; return rev;
+}
+function muArtIds(wantRaw){
+  var rev=muArtBuildRev(), ids=[], seen={};
+  function add(x){ var f=muNormKey(x); if(f&&!seen[f]){ seen[f]=1; ids.push({v:f, zh:/[\u4e00-\u9fa5]/.test(f), sp:muArtSpace(x)}); } }
+  String(wantRaw||'').split(/[\/、,&，,\s]+/).filter(Boolean).forEach(function(seg){
+    add(seg);
+    var canon=rev[muNormKey(seg)]||rev[muArtSpace(seg)];
+    if(canon){ add(canon); (muArtAlias[canon]||[]).forEach(add); }
+  });
+  return ids;
+}
+function muArtTokenHit(text,id){
+  if(!text) return false;
+  if(id.zh) return muNormKey(text).indexOf(id.v)>=0;
+  var esc=id.sp.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/\s+/g,'\\s+');
+  return new RegExp('(^|[^a-z0-9])'+esc+'([^a-z0-9]|$)').test(muArtSpace(text));
+}
+function muArtFieldHit(artistRaw,wantRaw){ var ids=muArtIds(wantRaw); return ids.length?ids.some(function(id){return muArtTokenHit(artistRaw,id);}):false; }
+function muArtNameHit(nameRaw,wantRaw){ var ids=muArtIds(wantRaw); return ids.length?ids.some(function(id){return muArtTokenHit(nameRaw,id);}):false; }
+/*__MUART_END__*/
 function muRank(items,query,artist){
     // 常见繁→简映射：Joox 等源返回繁体歌手名，统一后比对更准（映射见全局 muT2S）
     function norm(s){return String(s||'').toLowerCase().split('').map(function(c){return muT2S[c]||c;}).join('');}
@@ -1157,13 +1206,11 @@ function muRank(items,query,artist){
         var art=artOf(it);
         // v1.13.0：歌手命中增强——歌手出现在歌名里也算命中（如"晴天 (原唱 周杰伦)"，
         // gdstudio 常把原版作者写进歌名而 artist 字段是翻唱者本人）
-        var artHitInName = !!wantArt && name.indexOf(wantArt) >= 0;
+        var artHitInName = !!wantArt && muArtNameHit(it.name, wantArt);
         if(wantArt){
-            var artParts=artTokens(wantArt),artHit=artHitInName,artFieldHit=false;
-            for(var ai=0;ai<artParts.length;ai++){ if(art.indexOf(artParts[ai])>=0){artFieldHit=true;break;} }
-            for(var ai=0;ai<artParts.length;ai++){ if(!artHit&&art.indexOf(artParts[ai])>=0){artHit=true;break;} }
-            // v1.15.4：歌手字段命中是强证据（真原唱/本人作品）；仅歌名提及是弱证据
-            if(artFieldHit){ score+=60; if(art===wantArt)score+=30; }
+            var artParts=artTokens(wantArt),artFieldHit=muArtFieldHit(it.artist||it.author||'', wantArt),artHit=artFieldHit||artHitInName;
+            // v1.18.0：歌手字段命中支持外文/别名身份（周杰伦=Jay、林俊杰=JJ、Eason、G.E.M.…）
+            if(artFieldHit){ score+=60; if(muNormKey(art)===muNormKey(wantArt))score+=30; else score+=15; }
             else if(artHitInName){ score+=25; }
             else if(art){ score-=35; }
             // v1.15.4：指定了歌手、候选歌手字段却是别人 → 翻唱/二创，重罚
@@ -1171,7 +1218,7 @@ function muRank(items,query,artist){
         }
         if(parts.length>1){
             var nHitW={},aHitW={};
-            for(var i=0;i<parts.length;i++){if(bare.indexOf(parts[i])>=0)nHitW[i]=1;if(art.indexOf(parts[i])>=0)aHitW[i]=1;}
+            for(var i=0;i<parts.length;i++){if(bare.indexOf(parts[i])>=0)nHitW[i]=1;if(art.indexOf(parts[i])>=0||muArtFieldHit(it.artist||it.author||'',parts[i]))aHitW[i]=1;}
             var covered=0;
             for(var i=0;i<parts.length;i++){if(nHitW[i]||aHitW[i])covered++;}
             score+=covered*35;
@@ -1559,8 +1606,14 @@ async function muSearchGD(source,query,artist,checkTimeout){
         // v1.13.0：injahow meting 直链候选降为末位兜底（pri=99，实测当前返回空），
         // 避免它在 muRaceCheck 中挡在打分候选前面白白等超时
         if(source==='netease'&&pool.length){
-            var top=pool[0];
-            got.push({url:'https://api.injahow.cn/meting/?server=netease&type=url&id='+encodeURIComponent(top.it.id),item:top.it,pri:99});
+            // v1.18.0：gdstudio 取不到全长时的 VIP 兜底——按 netease 歌曲 ID 走独立 Meting
+            // 直链端点（Audio 元素跨域跟随 302 取全长，实测 CORS 开放、给完整曲非试听）。
+            // pri 靠后(60+)：gdstudio/iarc 正常命中时立即结算，不被这些兜底拖慢。
+            pool.slice(0,3).forEach(function(p,mi){
+                var idv=encodeURIComponent(p.it.id);
+                got.push({url:'https://api.injahow.cn/meting/?server=netease&type=url&id='+idv,item:p.it,pri:60+mi*2});
+                got.push({url:'https://api.qijieya.cn/meting/?server=netease&type=url&id='+idv,item:p.it,pri:61+mi*2});
+            });
         }
         if(!got.length)return null;
         return await muRaceCheck(got,function(g){return {url:g.url,name:g.item.name,artist:g.item.artist||g.item.author||'',source:source,id:g.item.id,pri:g.pri};},checkTimeout);
@@ -1661,12 +1714,10 @@ function muGateOk(it, query, artist){
         if(qn.indexOf(hnBare) < 0) return false;
     }
     if(artist){
-        var ha = muNormKey(it.artist||'');
-        var qa = muNormKey(artist);
-        if(ha && qa){
-            var qParts = qa.split(/[\/、,&，,]/).filter(Boolean);
-            var hitPart = qParts.some(function(t){ return t && (ha.indexOf(t) >= 0 || muNormKey(it.name).indexOf(t) >= 0); });
-            if(!hitPart) return false;
+        var ha0 = String(it.artist||it.author||'');
+        if(muNormKey(ha0)){
+            // v1.18.0：歌手字段/歌名命中均支持外文别名身份（周杰伦=Jay 等），不再误杀正版
+            if(!(muArtFieldHit(ha0, artist) || muArtNameHit(it.name||'', artist))) return false;
         }
     }
     return true;
@@ -1811,13 +1862,28 @@ var NICO_ID_SECS=12;                 // 录音时长（秒）：12s 兼顾速度
 var NICO_ID_MATCH_API='audio/match'; // NeteaseCloudMusicApi 听歌识曲端点
 var nicoIdBusy=false, nicoIdMode='player';
 var nicoIdRecTimer=null, nicoIdStream=null, nicoIdRec=null, nicoIdCtx=null;
+var nicoIdWatchdog=null; // v1.18.2 识曲看门狗：任何分支卡住/漏复位，40s 后强制把按钮亮回来
 var idBtn=panel.querySelector('#nico-mu-id-btn');
 var idSrcBtn=panel.querySelector('#nico-mu-id-src');
 var idSt=document.getElementById('nico-mu-id-status');
 if(idSt) idSt.textContent='v1.16.0 已加载｜点击识别当前播放的歌曲，识别后自动搜索并播放原唱';
 
+function nicoIdArmWatchdog(){
+    if(nicoIdWatchdog){ clearTimeout(nicoIdWatchdog); nicoIdWatchdog=null; }
+    nicoIdWatchdog=setTimeout(function(){
+        nicoIdWatchdog=null;
+        if(!nicoIdBusy) return;
+        try{ muAbortAll(); }catch(e){}
+        try{ nicoIdCleanup(); }catch(e){}
+        nicoIdSetBusy(false,'听歌识曲');
+        nicoIdStatus('识别超时，请重新点击');
+        try{ nicoShowToast('识别超时，请重试'); }catch(e){}
+    },40000);
+}
 function nicoIdSetBusy(b, txt){
     nicoIdBusy=b;
+    if(b){ nicoIdArmWatchdog(); }
+    else if(nicoIdWatchdog){ clearTimeout(nicoIdWatchdog); nicoIdWatchdog=null; }
     if(idBtn){ idBtn.disabled=b; if(txt!==undefined) idBtn.textContent=txt; }
     if(idSrcBtn) idSrcBtn.disabled=b;
 }
@@ -2015,8 +2081,8 @@ function nicoIdSearchAndPlay(name, artist, id){
             totalShown=count||0;
             titD.textContent=isFinal ? (totalShown?('找到 '+totalShown+' 个结果'):'搜索完成') : ('找到 '+count+' 个结果（继续搜索中…）');
         }).then(function(hits){
-            if(myTicket!==muSearchTicket) return;
             nicoIdSetBusy(false,'听歌识曲');
+            if(myTicket!==muSearchTicket) return;
             var maxTry=Math.min(hits ? hits.length : 0, 6);
             var probeNext=function(i){
                 if(i>=maxTry) return Promise.resolve(null);
@@ -2039,8 +2105,8 @@ function nicoIdSearchAndPlay(name, artist, id){
                 nicoIdPlayHit(best, best.id, best.source);
             });
         }).catch(function(){
-            if(myTicket!==muSearchTicket) return;
             nicoIdSetBusy(false,'听歌识曲');
+            if(myTicket!==muSearchTicket) return;
             nicoIdStatus('搜索失败，请重试');
         });
     }
@@ -2375,7 +2441,7 @@ trBtn.onclick = function(){
     }
 };
 
-/* ===== 4.7 弹幕歌词：透明歌词模块（酒馆界面上层·可拖动）+ 面板内设置 ===== */
+/* ===== 4.7 顶部栏歌词条：歌词并入酒馆顶部栏 + 面板内设置（v1.19.0） ===== */
 var DANMU_API = 'https://music-api.gdstudio.xyz/api.php';
 var danmuEnabled = (localStorage.getItem('nico-danmu-on') || '1') === '1';
 var danmuSettings = {
@@ -2386,7 +2452,9 @@ var danmuSettings = {
     opacity: parseFloat(localStorage.getItem('nico-danmu-op') || '1'),
     rainbow: (localStorage.getItem('nico-danmu-rb') || '0') === '1'
 };
-var nicoLyrics = [], nicoLyricKey = '', nicoLyricMod = null;
+var nicoLyrics = [], nicoLyricKey = '';
+/* 顶部栏歌词条状态（v1.20.0：单行横向滚动、不改顶栏高度、点图标时临时让位） */
+var LBl = { band:null, vp:null, list:null, holder:null, els:[], onEl:null, size:20, barH:0, idx:-99, key:'', float:false, suspended:false, suspendUntil:0, marq:null, marqEl:null };
 function parseLRC(lrcText){
     if(!lrcText) return [];
     var res = [];
@@ -2456,56 +2524,295 @@ function fetchDanmuLyrics(song, artist, sid, src){
         }
     }, 8000);
 }
-function updLyric(){
-    if(!nicoLyricMod || !danmuEnabled) return;
-    var cur = nicoLyricMod.querySelector('.nico-lyr-cur');
-    var prev = nicoLyricMod.querySelector('.nico-lyr-prev');
-    if(nicoLyrics.length === 0){ if(cur) cur.textContent = '未在播放'; if(prev) prev.textContent = ''; return; }
-    var ct = au.currentTime || 0;
-    var idx = -1;
-    for(var i=0;i<nicoLyrics.length;i++){ if(nicoLyrics[i].time <= ct + 0.3) idx = i; else break; }
-    if(idx === -1) return;
-    var t = nicoLyrics[idx].text;
-    var p = idx > 0 ? nicoLyrics[idx-1].text : '';
-    if(cur && cur.textContent !== t){
-        cur.textContent = t;
-        cur.style.color = 'rgb(' + danmuSettings.colorR + ',' + danmuSettings.colorG + ',' + danmuSettings.colorB + ')';
-        cur.style.fontSize = danmuSettings.size + 'px';
-        cur.style.opacity = danmuSettings.opacity;
-        if(danmuSettings.rainbow){ cur.classList.add('gradient'); }
-        else { cur.classList.remove('gradient'); }
-    }
-    if(prev) prev.textContent = p;
+/* —— 顶部栏歌词条实现（v1.19.0）——
+   放在酒馆顶部栏 #top-settings-holder 内部：开启歌词时隐藏顶栏图标、把顶栏临时加高，
+   歌词整列跟随播放进度滚动；关闭歌词即原样还原。 */
+function nicoTbHolder(){
+    try{ return document.getElementById('top-settings-holder'); }catch(e){ return null; }
 }
-function createLyricMod(){
-    if(nicoLyricMod) return;
-    nicoLyricMod = document.createElement('div');
-    nicoLyricMod.className = 'nico-lyric-mod' + (danmuEnabled ? '' : ' hidden');
-    nicoLyricMod.innerHTML = '<div class="nico-lyr-prev"></div><div class="nico-lyr-cur">未在播放</div>';
-    document.body.appendChild(nicoLyricMod);
-    // 拖动（鼠标 + 触摸），限制在页面上半区不遮挡操作
-    var isD = false, sx = 0, sy = 0, sl = 0, st = 0;
-    function dStart(cx, cy){
-        isD = true; sx = cx; sy = cy;
-        var r = nicoLyricMod.getBoundingClientRect();
-        sl = r.left; st = r.top;
-        nicoLyricMod.style.left = sl + 'px'; nicoLyricMod.style.top = st + 'px';
-        nicoLyricMod.style.transform = 'none';
+/* 字号 → 实际字号（受顶栏高度限制，绝不撑破顶栏；字号仍由面板滑杆控制） */
+function nicoLyricMetrics(){
+    var barH = (LBl.holder && LBl.holder.clientHeight) ? LBl.holder.clientHeight : 44;
+    var size = Math.max(12, Math.min(40, parseInt(danmuSettings.size, 10) || 20));
+    size = Math.min(size, Math.max(12, barH - 6));
+    return { size:size, barH:barH };
+}
+/* —— 颜色可读性：歌词颜色若与顶部栏底色太接近（如白字落在浅色顶栏），
+   自动换成与底色对比度更高的黑白，保证任何主题下都看得清 —— */
+function nicoRelLum(r, g, b){
+    var s = [r, g, b].map(function(v){ v = v / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    return 0.2126 * s[0] + 0.7152 * s[1] + 0.0722 * s[2];
+}
+function nicoContrast(l1, l2){
+    var a = Math.max(l1, l2), b = Math.min(l1, l2);
+    return (a + 0.05) / (b + 0.05);
+}
+/* 取一层 CSS 背景色（可能带 alpha） */
+function nicoParseCssColor(str){
+    if(!str) return null;
+    var m = String(str).match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?/);
+    if(!m) return null;
+    return { r:parseFloat(m[1]), g:parseFloat(m[2]), b:parseFloat(m[3]), a:(m[4] === undefined ? 1 : parseFloat(m[4])) };
+}
+function nicoBlend(top, base){
+    var a = top.a + base.a * (1 - top.a);
+    if(a <= 0) return { r:255, g:255, b:255, a:1 };
+    return {
+        r:(top.r * top.a + base.r * base.a * (1 - top.a)) / a,
+        g:(top.g * top.a + base.g * base.a * (1 - top.a)) / a,
+        b:(top.b * top.a + base.b * base.a * (1 - top.a)) / a,
+        a:a
+    };
+}
+/* 歌词条现在是透明底，颜色可读性按"顶栏真实底色"判断（#top-bar 主题底色 → body 底色 → 兜底白），
+   保证"白字落在浅色顶栏"这类情况仍会自动换成深色 */
+function nicoBandBgLum(){
+    try{
+        var el = LBl.float ? LBl.band : (document.getElementById('top-bar') || document.body);
+        var top = nicoParseCssColor(getComputedStyle(el).backgroundColor);
+        var body = nicoParseCssColor(getComputedStyle(document.body).backgroundColor);
+        var base = (body && body.a > 0) ? nicoBlend(body, { r:255, g:255, b:255, a:1 }) : { r:255, g:255, b:255, a:1 };
+        var res = (top && top.a > 0) ? nicoBlend(top, base) : base;
+        return nicoRelLum(res.r, res.g, res.b);
+    }catch(e){ return 1; }
+}
+function nicoLyricColor(){
+    var rgb = [danmuSettings.colorR || 0, danmuSettings.colorG || 0, danmuSettings.colorB || 0];
+    var bg = nicoBandBgLum();
+    var user = nicoRelLum(rgb[0], rgb[1], rgb[2]);
+    if(nicoContrast(user, bg) >= 2.45) return 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+    var dk = nicoRelLum(17, 17, 17), lt = nicoRelLum(250, 250, 250);
+    return nicoContrast(dk, bg) >= nicoContrast(lt, bg) ? 'rgb(17,17,17)' : 'rgb(250,250,250)';
+}
+/* 字号/颜色/不透明度/彩虹 → 歌词条样式；字号按顶栏高度收口后重新对齐当前句 */
+function applyLyricStyle(){
+    if(!LBl.band) return;
+    var m = nicoLyricMetrics();
+    LBl.size = m.size; LBl.barH = m.barH;
+    try{
+        LBl.band.style.setProperty('--nico-lyr-size', m.size + 'px');
+        LBl.band.style.setProperty('--nico-lyr-color', nicoLyricColor());
+        LBl.band.style.setProperty('--nico-lyr-op', String(danmuSettings.opacity));
+        LBl.band.style.removeProperty('height');
+    }catch(e){}
+    if(LBl.onEl){
+        if(danmuSettings.rainbow) LBl.onEl.classList.add('gradient');
+        else LBl.onEl.classList.remove('gradient');
     }
-    function dMove(cx, cy){
-        if(!isD) return;
-        var nl = Math.max(0, Math.min(window.innerWidth - nicoLyricMod.offsetWidth, sl + (cx - sx)));
-        var mt = Math.floor(window.innerHeight * 0.55);
-        var nt = Math.max(0, Math.min(mt, st + (cy - sy)));
-        nicoLyricMod.style.left = nl + 'px'; nicoLyricMod.style.top = nt + 'px';
+    scrollToLine(LBl.idx);
+}
+/* 停掉正在跑的那一句的跑马灯（换句 / 关歌词 / 重建列表时都要先停） */
+function nicoStopMarq(){
+    if(LBl.marq){ try{ LBl.marq.cancel(); }catch(e){} LBl.marq = null; }
+    if(LBl.marqEl){ try{ LBl.marqEl.style.transform = ''; }catch(e){} LBl.marqEl = null; }
+}
+/* 把第 i 句横向对齐到歌词条：短句居中；超宽长句先滑到左边缘，再由该句自己线性横移（跑马灯） */
+function scrollToLine(i){
+    if(!LBl.list || !LBl.vp) return;
+    var n = LBl.els.length;
+    if(!n) return;
+    i = Math.min(Math.max(i, 0), n - 1);
+    var el = LBl.els[i];
+    if(!el) return;
+    var vw = LBl.vp.clientWidth || 0;
+    var ew = el.offsetWidth || 0;
+    if(!vw || !ew) return;   // 顶栏尚未布局（如被隐藏），等下一次 tick 再对位
+    var list = LBl.list;
+    try{
+        if(ew > vw - 12){
+            var x1 = el.offsetLeft - 8;        // 长句左边缘停在可视区左 8px
+            var move = ew + 16 - vw;           // 要横移的总距离：把句尾推到可视区右 8px
+            var dur = Math.min(16, Math.max(3.5, move / 60));
+            nicoStopMarq();
+            list.style.transition = '';        // 轨道先平滑滑到左边缘（单段过渡，不叠两段）
+            list.style.transform = 'translate3d(' + (-Math.round(x1)) + 'px,0,0)';
+            if(el.animate){                    // 再让这一句自己按字量线性横移（WAAPI，跑完停在末尾）
+                try{
+                    LBl.marqEl = el;
+                    LBl.marq = el.animate(
+                        [{ transform:'translate3d(0,0,0)' },
+                         { transform:'translate3d(' + (-Math.round(move)) + 'px,0,0)' }],
+                        { duration: Math.round(dur * 1000), easing:'linear', fill:'forwards', delay: 420 }
+                    );
+                }catch(e){ LBl.marq = null; LBl.marqEl = null; }
+            }
+        } else {
+            nicoStopMarq();
+            list.style.transition = '';
+            var x = el.offsetLeft + ew / 2 - vw / 2;
+            list.style.transform = 'translate3d(' + (-Math.round(x)) + 'px,0,0)';
+        }
+    }catch(e){}
+}
+function setActiveLine(i){
+    var n = LBl.els.length;
+    if(!n) return;
+    i = Math.min(Math.max(i, 0), n - 1);
+    var el = LBl.els[i];
+    if(!el) return;
+    if(LBl.onEl && LBl.onEl !== el){
+        LBl.onEl.classList.remove('on');
+        LBl.onEl.classList.remove('gradient');
     }
-    function dEnd(){ isD = false; }
-    nicoLyricMod.addEventListener('mousedown', function(e){ dStart(e.clientX, e.clientY); e.preventDefault(); });
-    document.addEventListener('mousemove', function(e){ dMove(e.clientX, e.clientY); });
-    document.addEventListener('mouseup', dEnd);
-    nicoLyricMod.addEventListener('touchstart', function(e){ var t = e.touches[0]; dStart(t.clientX, t.clientY); }, {passive:true});
-    document.addEventListener('touchmove', function(e){ if(isD){ var t = e.touches[0]; dMove(t.clientX, t.clientY); } }, {passive:true});
-    document.addEventListener('touchend', dEnd);
+    LBl.onEl = el;
+    if(!el.classList.contains('on')) el.classList.add('on');
+    if(danmuSettings.rainbow) el.classList.add('gradient');
+    LBl.idx = i;
+    scrollToLine(i);
+}
+/* 歌词变化（换歌 / 拉到歌词 / 8 秒降级）时重建整列 */
+function renderLyricList(){
+    if(!LBl.list) return;
+    var list = LBl.list, arr = nicoLyrics;
+    nicoStopMarq();
+    try{ list.innerHTML = ''; }catch(e){ return; }
+    LBl.els = []; LBl.onEl = null; LBl.idx = 0;
+    if(!arr.length){
+        var d0 = document.createElement('div');
+        d0.className = 'nico-lyr-tb-line';
+        d0.textContent = '未在播放';
+        list.appendChild(d0);
+        LBl.els.push(d0);
+    } else {
+        for(var i=0;i<arr.length;i++){
+            var d = document.createElement('div');
+            d.className = 'nico-lyr-tb-line';
+            d.textContent = arr[i].text;
+            list.appendChild(d);
+            LBl.els.push(d);
+        }
+    }
+    // 换歌时直接落到当前句，不做整列从顶滑下来的多余动画
+    var init = 0;
+    if(arr.length){
+        var ct = au.currentTime || 0;
+        for(var j=0;j<arr.length;j++){ if(arr[j].time <= ct + 0.3) init = j; else break; }
+    }
+    setActiveLine(init);
+    try{ void list.offsetHeight; }catch(e){}
+    nicoSyncIconHide();   // 有歌词了 → 顶栏图标淡隐
+}
+function updLyric(){
+    if(!danmuEnabled || !LBl.band) return;
+    var key = nicoLyricKey + '|' + nicoLyrics.length;
+    if(key !== LBl.key){ LBl.key = key; renderLyricList(); }
+    if(!nicoLyrics.length || !LBl.els.length) return;
+    var ct = au.currentTime || 0, idx = 0;
+    for(var i=0;i<nicoLyrics.length;i++){ if(nicoLyrics[i].time <= ct + 0.3) idx = i; else break; }
+    if(idx !== LBl.idx) setActiveLine(idx);
+}
+/* —— 点击顶部栏图标时歌词临时让位（图标本身就是点击目标，歌词条 pointer-events:none 不挡点击）—— */
+function nicoHasOpenDrawer(){
+    try{ return document.querySelectorAll('.drawer-content.openDrawer').length > 0; }catch(e){ return false; }
+}
+function setSuspend(v){
+    v = !!v;
+    LBl.suspended = v;
+    if(LBl.band){ try{ LBl.band.classList.toggle('suspend', v); }catch(e){} }
+    nicoSyncIconHide();
+}
+/* 歌词在放且没在跟图标互动时，把顶栏图标淡隐（只是看不见，热区与点击全部保留） */
+function nicoSyncIconHide(){
+    var h = LBl.holder;
+    if(!h) return;
+    var off = !!danmuEnabled && !!LBl.band && LBl.band.style.display !== 'none' &&
+              nicoLyrics.length > 0 && !LBl.suspended;
+    try{ h.classList.toggle('nico-lyr-tb-icons-off', off); }catch(e){}
+}
+function nicoSyncSuspend(){
+    if(!LBl.band || !danmuEnabled) return;
+    var should = nicoHasOpenDrawer() || Date.now() < (LBl.suspendUntil || 0);
+    if(should !== LBl.suspended) setSuspend(should);
+    nicoSyncIconHide();
+}
+function nicoBindTopBar(){
+    var h = nicoTbHolder();
+    if(!h || h.__nicoLyrBound) return;
+    h.__nicoLyrBound = true;
+    var onHit = function(e){
+        try{
+            var t = e.target;
+            if(t && t.closest && t.closest('.drawer-toggle')){
+                LBl.suspendUntil = Date.now() + 900;  // 点图标立刻让出位置，避免文字压在图标上
+                setSuspend(true);
+            }
+        }catch(_e){}
+    };
+    try{
+        h.addEventListener('mousedown', onHit, true);
+        h.addEventListener('touchstart', onHit, true);
+        h.addEventListener('click', onHit, true);
+    }catch(e){}
+}
+/* 建歌词条：优先进顶部栏，顶栏缺失时退化为页面顶部浮条（不影响功能） */
+function createLyricBand(){
+    if(LBl.band) return;
+    var holder = nicoTbHolder();
+    var band = document.createElement('div');
+    band.id = 'nico-lyr-tb';
+    band.className = 'nico-lyr-tb' + (holder ? '' : ' is-float');
+    band.innerHTML = '<div class="nico-lyr-tb-vp"><div class="nico-lyr-tb-list"></div></div>';
+    (holder || document.body).appendChild(band);
+    LBl.band = band;
+    LBl.vp = band.querySelector('.nico-lyr-tb-vp');
+    LBl.list = band.querySelector('.nico-lyr-tb-list');
+    LBl.holder = holder;
+    LBl.float = !holder;
+    LBl.els = []; LBl.onEl = null; LBl.idx = -99; LBl.key = ''; LBl.suspended = false;
+    band.style.display = danmuEnabled ? 'flex' : 'none';
+    nicoBindTopBar();
+    if(!window.__nicoLyrDocClick){
+        window.__nicoLyrDocClick = true;
+        // 点了顶栏以外的地方（抽屉被关掉）后立刻恢复歌词；在抽屉里点则不恢复
+        document.addEventListener('click', function(e){
+            try{
+                if(!(e.target && e.target.closest && e.target.closest('#top-settings-holder'))) LBl.suspendUntil = 0;
+            }catch(_e){}
+            setTimeout(nicoSyncSuspend, 80);
+        }, true);
+        document.addEventListener('keydown', function(){
+            LBl.suspendUntil = 0;
+            setTimeout(nicoSyncSuspend, 80);
+        }, true);
+    }
+    if(!window.__nicoLyrResize){
+        window.__nicoLyrResize = true;
+        window.addEventListener('resize', function(){
+            if(!LBl.band || !danmuEnabled) return;
+            applyLyricStyle();
+            updLyric();
+        });
+    }
+    applyLyricStyle();
+    if(danmuEnabled) updLyric();
+}
+/* 歌词开关总闸：只控显示与顶部栏图标层级，不改变顶栏高度 */
+function applyLyricMode(on){
+    if(!LBl.band) createLyricBand();
+    if(!LBl.band) return;
+    var holder = nicoTbHolder();
+    if(holder && !LBl.holder){ // 顶栏晚于扩展出现：把歌词条搬进顶栏
+        try{
+            holder.appendChild(LBl.band);
+            LBl.band.classList.remove('is-float');
+            LBl.holder = holder; LBl.float = false;
+        }catch(e){}
+    }
+    on = !!on && !!LBl.band;
+    LBl.band.style.display = on ? 'flex' : 'none';
+    if(LBl.holder){
+        LBl.holder.classList.toggle('nico-lyr-tb-on', on);
+        if(!on){ try{ LBl.holder.classList.remove('nico-lyr-tb-icons-off'); }catch(e){} }  // 关歌词立刻还原图标
+    }
+    if(!on) nicoStopMarq();
+    if(on){
+        setSuspend(false);
+        applyLyricStyle();
+        updLyric();
+        nicoBindTopBar();
+        nicoSyncSuspend();
+    }
+    nicoSyncIconHide();
 }
 // 面板内弹幕设置
 var dmSet = panel.querySelector('.nico-danmu-set');
@@ -2528,13 +2835,14 @@ dmToggle.addEventListener('click', function(){ dmBody.classList.toggle('open'); 
 panel.querySelector('#nico-danmu-sw').addEventListener('click', function(){
     danmuEnabled = !danmuEnabled;
     localStorage.setItem('nico-danmu-on', danmuEnabled ? '1' : '0');
-    if(nicoLyricMod) nicoLyricMod.classList.toggle('hidden', !danmuEnabled);
+    applyLyricMode(danmuEnabled);
     updDanmuUI();
 });
 panel.querySelector('#nico-danmu-rb').addEventListener('click', function(){
     danmuSettings.rainbow = !danmuSettings.rainbow;
     localStorage.setItem('nico-danmu-rb', danmuSettings.rainbow ? '1' : '0');
     updDanmuUI();
+    applyLyricStyle();
 });
 panel.querySelector('#nico-danmu-color').addEventListener('change', function(){
     var val = this.value.trim();
@@ -2546,34 +2854,40 @@ panel.querySelector('#nico-danmu-color').addEventListener('change', function(){
     localStorage.setItem('nico-danmu-r', String(danmuSettings.colorR));
     localStorage.setItem('nico-danmu-g', String(danmuSettings.colorG));
     localStorage.setItem('nico-danmu-b', String(danmuSettings.colorB));
+    applyLyricStyle();
 });
 panel.querySelector('#nico-danmu-size').addEventListener('input', function(){
     danmuSettings.size = parseInt(this.value, 10);
     localStorage.setItem('nico-danmu-size', String(danmuSettings.size));
     panel.querySelector('#nico-danmu-size-v').textContent = danmuSettings.size;
+    applyLyricStyle();
 });
 panel.querySelector('#nico-danmu-op').addEventListener('input', function(){
     danmuSettings.opacity = parseInt(this.value, 10) / 100;
     localStorage.setItem('nico-danmu-op', String(danmuSettings.opacity));
     panel.querySelector('#nico-danmu-op-v').textContent = this.value + '%';
+    applyLyricStyle();
 });
 panel.querySelector('#nico-danmu-reset').addEventListener('click', function(){
     danmuSettings = { colorR:255, colorG:255, colorB:255, size:20, opacity:1, rainbow:false };
     ['nico-danmu-r','nico-danmu-g','nico-danmu-b','nico-danmu-size','nico-danmu-op','nico-danmu-rb'].forEach(function(k){ try{localStorage.removeItem(k);}catch(e){} });
     updDanmuUI();
-    if(nicoLyricMod){
-        var cur = nicoLyricMod.querySelector('.nico-lyr-cur');
-        if(cur){ cur.style.color = '#fff'; cur.style.fontSize = '20px'; cur.style.opacity = 1; cur.classList.remove('gradient'); }
-    }
+    applyLyricStyle();
 });
 updDanmuUI();
-try{ createLyricMod(); }catch(e){}
+try{ createLyricBand(); }catch(e){}
+try{ applyLyricMode(danmuEnabled); }catch(e){}
+/* 900ms 兜底轮询：暂停中 / 歌词刚拉到位时也能立刻对齐（timeupdate 只在播放中触发） */
+try{ if(window.__nicoLyrTick) clearInterval(window.__nicoLyrTick); }catch(e){}
+window.__nicoLyrTick = setInterval(function(){ try{ updLyric(); }catch(e){} try{ nicoSyncSuspend(); }catch(e){} }, 900);
 // 播放联动：切歌时加载对应歌词
 var _origLoadP = loadP;
 loadP = function(){
     _origLoadP();
     var s = playlist[cIdx];
+    LBl.key = '';
     if(s) fetchDanmuLyrics(s.name, s.artist || '', s.sid || '', s.src || '');
+    try{ updLyric(); }catch(e){}
 };
 // 初始加载当前歌曲歌词
 try{ var _cs = playlist[cIdx]; if(_cs) fetchDanmuLyrics(_cs.name, _cs.artist || '', _cs.sid || '', _cs.src || ''); }catch(e){}
@@ -4985,927 +5299,5 @@ function GenerateFP(floatArray) {
 return {GenerateFP:GenerateFP,WASM_BINARY:WASM_BINARY};
 })();
 
-/* ===== 7. v1.17.0 聊天存档管理器（原 chat-archive-manager v1.3.0 并入第二页） =====
-   · 功能与独立版完全一致：按角色归档 / 展开查看存档 / 备注 / 存档专属头像 / 一键加载 /
-     数量懒加载 / 并发受限(5) / 请求超时(20s) / 列表缓存 / 渲染串行化 / 当前标记；
-   · 全部状态封闭在 nicoArchive IIFE 内，不与音乐播放器等外层逻辑共享任何变量；
-   · 设置仍存 extension_settings['chat-archive-manager']，旧版备注与专属头像无缝保留；
-   · 首次切到存档页才发起网络请求（比独立版更省：启动阶段零请求、零列表渲染）；
-   · 扩展重载时自动解绑旧事件、断开旧 Observer、清理定时器，不叠加、不卡顿。 */
-var nicoArchive = (function(){
-    var MODULE_NAME = 'chat-archive-manager';
-    var MODULE_VERSION = '1.17.0-merged';
-
-    /* ---------- 酒馆上下文桥接（防御式，取不到不拖垮主面板） ---------- */
-    function getContext(){
-        try{
-            if(window.SillyTavern && typeof window.SillyTavern.getContext==='function') return window.SillyTavern.getContext();
-        }catch(e){}
-        return null;
-    }
-    // setActiveGroup / saveChatDebounced 未挂在 getContext() 上：动态 import 一次（ESM 缓存，不会重复执行酒馆主模块）
-    var arcMod = { setActiveGroup:null, saveChatDebounced:null };
-    var arcModReady = Promise.resolve();
-    try{
-        arcModReady = import('../../../../script.js').then(function(m){
-            if(m && typeof m.setActiveGroup==='function') arcMod.setActiveGroup = m.setActiveGroup;
-            if(m && typeof m.saveChatDebounced==='function') arcMod.saveChatDebounced = m.saveChatDebounced;
-        }).catch(function(e){ console.warn('['+MODULE_NAME+'] script.js 桥接失败，群聊退出/即时保存将走兜底', e); });
-    }catch(e){ console.warn('['+MODULE_NAME+'] 动态 import 不可用', e); }
-
-    /* ---------- 持久化设置（沿用独立版存储键，旧数据自动继承） ---------- */
-    function rawSettings(){
-        var c = getContext();
-        var es = c && (c.extensionSettings || c.extension_settings);
-        return es || null;
-    }
-    function getSettings(){
-        var es = rawSettings();
-        if(!es) return null;
-        if(!es[MODULE_NAME]) es[MODULE_NAME] = { notes:{} };
-        if(!es[MODULE_NAME].notes) es[MODULE_NAME].notes = {};
-        if(!es[MODULE_NAME].avatars) es[MODULE_NAME].avatars = {};
-        return es[MODULE_NAME];
-    }
-    var settings = getSettings() || { notes:{}, avatars:{} };
-    var notes = settings.notes;
-    var avatars = settings.avatars;
-    // 桥接晚于模块执行就绪时，把就绪前写入的临时数据并回真实设置
-    function ensureSettings(){
-        var s = getSettings();
-        if(!s) return false;
-        if(s !== settings){
-            Object.keys(notes).forEach(function(k){ if(!s.notes[k]) s.notes[k] = notes[k]; });
-            Object.keys(avatars).forEach(function(k){ if(!s.avatars[k]) s.avatars[k] = avatars[k]; });
-            settings = s; notes = s.notes; avatars = s.avatars;
-        }
-        return true;
-    }
-    function saveSettings(){
-        try{ var c = getContext(); if(c && c.saveSettingsDebounced) c.saveSettingsDebounced(); }catch(e){}
-    }
-
-    /* ---------- DOM 与状态 ---------- */
-    var arcPage = null, listEl = null, statsEl = null, refreshBtn = null, filterEl = null;
-    var countsStarted = false; // 首次进入存档页才拉取数量（懒加载）
-    var countsLoaded = false;
-    var counts = {};        // avatar -> 存档数量
-    var chatsCache = {};    // avatar -> 完整存档列表
-    var expanded = new Set();
-    var COUNT_CONCURRENCY = 5;
-    var FETCH_TIMEOUT = 20000;
-    var cacheVersion = 0;
-    var countsPromise = null;
-    var renderChain = Promise.resolve();
-    var lastSignature = null;
-
-    var boundEvents = [];
-    var timers = [];
-    var chatObserver = null;
-    var applyScheduled = false;
-    var avatarFileInput = null;
-    function arcTimeout(fn, ms){ var id = setTimeout(fn, ms); timers.push(id); return id; }
-
-    /* ---------- 极简 SVG 图标（与主页同一套 24x24 线性填充风格） ---------- */
-    var SVG_CHEVRON = '<svg viewBox="0 0 24 24"><path d="M9.29 6.71L14.58 12l-5.29 5.29L10.71 18.7l6.59-6.59a1 1 0 0 0 0-1.41l-6.59-6.59z"/></svg>';
-    var SVG_IMAGE = '<svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.9 13.05l2.1 2.53 3.1-3.88L19 17H5l3.9-3.95z"/></svg>';
-    var SVG_ERASER = '<svg viewBox="0 0 24 24"><path d="M15.14 3c-.51 0-1.02.2-1.41.59L2.59 14.73a2 2 0 0 0 0 2.83l3.85 3.85c.39.39.9.59 1.41.59H22v-2H7.83l-3-3L13.44 5.7l5.06 5.1 1.42-1.41a2 2 0 0 0 0-2.84l-3.36-3.36A1.98 1.98 0 0 0 15.14 3z"/></svg>';
-
-    /* ---------- 工具函数 ---------- */
-    function noteKey(avatar, fileName){ return avatar + '::' + fileName; }
-
-    function toMs(value){
-        if(!value) return 0;
-        if(typeof value === 'number') return value;
-        var s = String(value).trim();
-        if(/^\d+$/.test(s)){
-            var n = Number(s);
-            return n < 1e11 ? n * 1000 : n;
-        }
-        var d = new Date(s);
-        return isNaN(d.getTime()) ? 0 : d.getTime();
-    }
-    function formatDateTime(value){
-        var ms = toMs(value);
-        if(!ms) return '';
-        var d = new Date(ms);
-        var p = function(n){ return String(n).padStart(2,'0'); };
-        return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());
-    }
-    function formatTimestampName(base){
-        if(!/^\d+$/.test(base)) return null;
-        return formatDateTime(base);
-    }
-    function sortChats(list){
-        var msByChat = new Map();
-        list.forEach(function(c){ msByChat.set(c, toMs(c && c.last_mes)); });
-        return list.slice().sort(function(a,b){ return (msByChat.get(b) || 0) - (msByChat.get(a) || 0); });
-    }
-
-    /* ---------- 数据获取（酒馆原生接口，超时 + 并发上限，绝不压垮本地服务） ---------- */
-    function fetchWithTimeout(url, options){
-        var ctrl = new AbortController();
-        var timer = setTimeout(function(){ ctrl.abort(); }, FETCH_TIMEOUT);
-        return fetch(url, Object.assign({}, options, { signal: ctrl.signal })).finally(function(){ clearTimeout(timer); });
-    }
-    async function fetchSimpleCount(avatar){
-        try{
-            var c = getContext();
-            var res = await fetchWithTimeout('/api/characters/chats', {
-                method:'POST',
-                headers:c.getRequestHeaders(),
-                body:JSON.stringify({ avatar_url: avatar, simple: true })
-            });
-            if(!res.ok) return 0;
-            var data = await res.json();
-            if(data && data.error === true) return 0;
-            return Array.isArray(data) ? data.length : 0;
-        }catch(e){
-            if(e && e.name==='AbortError') console.warn('['+MODULE_NAME+'] 获取角色存档数量超时('+FETCH_TIMEOUT+'ms):', avatar);
-            else console.warn('['+MODULE_NAME+'] 获取角色存档数量失败:', e);
-            return 0;
-        }
-    }
-    async function fetchCharacterChats(avatar){
-        try{
-            var c = getContext();
-            var res = await fetchWithTimeout('/api/characters/chats', {
-                method:'POST',
-                headers:c.getRequestHeaders(),
-                body:JSON.stringify({ avatar_url: avatar })
-            });
-            if(!res.ok) return null;
-            var data = await res.json();
-            if(data && data.error === true) return [];
-            return Array.isArray(data) ? data : [];
-        }catch(e){
-            if(e && e.name==='AbortError') console.warn('['+MODULE_NAME+'] 获取角色存档超时('+FETCH_TIMEOUT+'ms):', avatar);
-            else console.warn('['+MODULE_NAME+'] 获取角色存档失败:', e);
-            return null;
-        }
-    }
-    async function mapLimit(items, limit, fn){
-        var results = new Array(items.length);
-        var next = 0;
-        var worker = async function(){
-            while(next < items.length){
-                var i = next++;
-                results[i] = await fn(items[i], i);
-            }
-        };
-        var workers = [];
-        for(var w=0; w<Math.min(limit, items.length); w++) workers.push(worker());
-        await Promise.all(workers);
-        return results;
-    }
-    function loadCounts(){
-        if(countsPromise) return countsPromise;
-        countsPromise = (async function(){
-            try{
-                var list = (getContext() && getContext().characters) || [];
-                countsLoaded = true;
-                var missing = list.filter(function(c){ return c && c.avatar && counts[c.avatar] === undefined; });
-                if(missing.length > 0){
-                    await mapLimit(missing, COUNT_CONCURRENCY, async function(c){
-                        counts[c.avatar] = await fetchSimpleCount(c.avatar);
-                    });
-                    await renderCharFolders(true);
-                }else{
-                    await renderCharFolders();
-                }
-            }catch(e){
-                console.warn('['+MODULE_NAME+'] 加载存档数量失败:', e);
-            }
-        })().finally(function(){ countsPromise = null; });
-        return countsPromise;
-    }
-
-    /* ---------- UI：统计 / 筛选 ---------- */
-    function updateStats(){
-        if(!statsEl) return;
-        var c = getContext();
-        var total = (c && c.characters) ? c.characters.length : 0;
-        var visible = listEl ? listEl.querySelectorAll('.nico-arc-char').length : 0;
-        statsEl.textContent = countsLoaded ? ('共 '+total+' 个角色，'+visible+' 个有存档') : ('共 '+total+' 个角色');
-    }
-    function applyFilter(){
-        if(!listEl || !filterEl) return;
-        var q = (filterEl.value || '').trim().toLowerCase();
-        var folders = listEl.querySelectorAll('.nico-arc-char');
-        for(var i=0;i<folders.length;i++){
-            var f = folders[i];
-            if(!q){ f.style.display = ''; continue; }
-            var nameNode = f.querySelector('.nico-arc-nm');
-            var name = nameNode ? (nameNode.textContent || '').toLowerCase() : '';
-            var hit = name.indexOf(q) >= 0;
-            if(!hit){
-                var chats = chatsCache[f.dataset.avatar];
-                if(chats){
-                    for(var j=0;j<chats.length;j++){
-                        var ch = chats[j];
-                        var base = String(ch.file_name || '').replace(/\.jsonl$/i,'');
-                        var title = formatTimestampName(base) || base;
-                        var note = notes[noteKey(f.dataset.avatar, ch.file_name)] || '';
-                        if(title.toLowerCase().indexOf(q) >= 0 || note.toLowerCase().indexOf(q) >= 0){ hit = true; break; }
-                    }
-                }
-            }
-            f.style.display = hit ? '' : 'none';
-        }
-    }
-
-    /* ---------- UI：角色档案夹 ---------- */
-    function buildCharFolder(c, count){
-        var folder = document.createElement('div');
-        folder.className = 'nico-arc-char';
-        folder.dataset.avatar = c.avatar;
-
-        var head = document.createElement('div');
-        head.className = 'nico-arc-head';
-        var chevron = document.createElement('span');
-        chevron.className = 'nico-arc-cv';
-        chevron.innerHTML = SVG_CHEVRON;
-        var name = document.createElement('span');
-        name.className = 'nico-arc-nm';
-        name.textContent = c.name || String(c.avatar).replace(/\.png$/i,'');
-        name.title = c.name || c.avatar;
-        var badge = document.createElement('span');
-        badge.className = 'nico-arc-badge';
-        badge.textContent = count === -1 ? '…' : String(count);
-        head.appendChild(chevron); head.appendChild(name); head.appendChild(badge);
-
-        var body = document.createElement('div');
-        body.className = 'nico-arc-body';
-
-        head.addEventListener('click', function(){ toggleFolder(folder, c.avatar); });
-        folder.appendChild(head);
-        folder.appendChild(body);
-        return folder;
-    }
-    function toggleFolder(folder, avatar){
-        var isOpen = folder.classList.toggle('nico-open');
-        if(isOpen){
-            expanded.add(avatar);
-            var body = folder.querySelector('.nico-arc-body');
-            if(body) renderChatList(avatar, body);
-        }else{
-            expanded.delete(avatar);
-        }
-    }
-    async function renderChatList(avatar, body){
-        var chats = chatsCache[avatar];
-        if(chats && body.dataset.cacheVer === String(cacheVersion) && body.childElementCount > 0) return;
-        body.innerHTML = '';
-
-        if(!chats){
-            var loading = document.createElement('div');
-            loading.className = 'nico-arc-loading';
-            loading.textContent = '加载存档中…';
-            body.appendChild(loading);
-
-            chats = await fetchCharacterChats(avatar);
-            if(chats === null){
-                body.innerHTML = '';
-                var err = document.createElement('div');
-                err.className = 'nico-arc-empty';
-                err.textContent = '加载失败，请点右上角刷新按钮重试';
-                body.appendChild(err);
-                return;
-            }
-            chats = sortChats(chats);
-            chatsCache[avatar] = chats;
-            if(counts[avatar] !== chats.length){
-                counts[avatar] = chats.length;
-                updateCharBadge(avatar, chats.length);
-            }
-            body.innerHTML = '';
-        }
-
-        if(chats.length === 0){
-            var empty = document.createElement('div');
-            empty.className = 'nico-arc-empty';
-            empty.textContent = '该角色暂无聊天存档';
-            body.appendChild(empty);
-            body.dataset.cacheVer = String(cacheVersion);
-            return;
-        }
-
-        var currentChat = getContext() ? getContext().chatId : null;
-        var frag = document.createDocumentFragment();
-        chats.forEach(function(chat){ frag.appendChild(buildChatRow(chat, avatar, currentChat)); });
-        body.appendChild(frag);
-        body.dataset.cacheVer = String(cacheVersion);
-    }
-    function updateCharBadge(avatar, count){
-        if(!listEl) return;
-        var folder = listEl.querySelector('.nico-arc-char[data-avatar="'+CSS.escape(avatar)+'"]');
-        if(!folder) return;
-        var badge = folder.querySelector('.nico-arc-badge');
-        if(badge) badge.textContent = String(count);
-    }
-
-    /* ---------- 存档专属头像 ---------- */
-    function getChatAvatar(avatar, fileName){ return avatars[noteKey(avatar, fileName)] || null; }
-    function setChatAvatar(avatar, fileName, dataUrl){ avatars[noteKey(avatar, fileName)] = dataUrl; ensureSettings(); saveSettings(); }
-    function removeChatAvatar(avatar, fileName){ delete avatars[noteKey(avatar, fileName)]; ensureSettings(); saveSettings(); }
-
-    function defaultAvatarUrl(avatar){
-        var c = getContext();
-        if(c && typeof c.getThumbnailUrl==='function'){
-            try{ return c.getThumbnailUrl('avatar', avatar); }catch(e){}
-        }
-        return '/characters/' + encodeURIComponent(avatar);
-    }
-    function isCurrentChat(avatar, fileName){
-        var c = getContext();
-        if(!c || !c.chatId) return false;
-        var cur = c.characters[c.characterId];
-        if(!cur || cur.avatar !== avatar) return false;
-        return stripJsonl(fileName) === c.chatId;
-    }
-    function currentCharacter(){
-        var c = getContext();
-        if(!c) return null;
-        var ci = c.characterId;
-        if(ci === undefined || ci === null || ci === '') return null;
-        var idx = Number(ci);
-        var cs = c.characters || [];
-        if(!Number.isInteger(idx) || idx < 0 || idx >= cs.length) return null;
-        return cs[idx] || null;
-    }
-    function currentChatAvatarUrl(){
-        var c = currentCharacter();
-        if(!c || !c.avatar) return null;
-        var ctx = getContext();
-        if(!ctx || !ctx.chatId) return null;
-        return getChatAvatar(c.avatar, ctx.chatId + '.jsonl');
-    }
-    function isRoleAvatarImg(img, avatar){
-        var src = img.getAttribute('src') || '';
-        if(!src || !avatar) return false;
-        var encoded = encodeURIComponent(avatar);
-        return (src.indexOf('type=avatar') >= 0
-                && (src.indexOf('file='+encoded) >= 0 || src.indexOf('file='+avatar) >= 0))
-            || src.indexOf('/characters/'+encoded) >= 0
-            || src.indexOf('/characters/'+avatar) >= 0;
-    }
-    function replaceMessageAvatar(img, avatar, customUrl){
-        if(customUrl){
-            if(img.dataset.camCustom === '1'){
-                img.src = customUrl;
-            }else if(isRoleAvatarImg(img, avatar)){
-                img.dataset.camOrig = img.getAttribute('src') || '';
-                img.dataset.camCustom = '1';
-                img.src = customUrl;
-            }
-        }else if(img.dataset.camCustom === '1'){
-            img.src = img.dataset.camOrig || '';
-            delete img.dataset.camCustom;
-            delete img.dataset.camOrig;
-        }
-    }
-    function isManagementArea(img){
-        return !!img.closest('#rm_print_characters_block, #character_edit_panel, #extension_settings, #avatar_upload_panel, #option_section, .mes_edit_area');
-    }
-    function collectEmbeddedAvatars(scope){
-        var out = [];
-        var all = scope.querySelectorAll('img.ls-avatar, img[style*="object-fit:cover"]');
-        for(var i=0;i<all.length;i++){
-            var img = all[i];
-            if(isManagementArea(img)) continue;
-            var style = img.getAttribute('style') || '';
-            if(img.classList.contains('ls-avatar')){ out.push(img); continue; }
-            if(/margin-left:\s*\d+px/.test(style)) continue;
-            var h = /height:\s*(\d+)px/.exec(style);
-            if(h && Number(h[1]) >= 30 && Number(h[1]) <= 64 && /border-radius/.test(style)) out.push(img);
-        }
-        return out;
-    }
-    function replaceEmbeddedAvatar(img, customUrl){
-        if(customUrl){
-            if(img.dataset.camCustom === '1'){
-                img.src = customUrl;
-            }else{
-                img.dataset.camOrig = img.getAttribute('src') || '';
-                img.dataset.camCustom = '1';
-                img.src = customUrl;
-            }
-        }else if(img.dataset.camCustom === '1'){
-            img.src = img.dataset.camOrig || '';
-            delete img.dataset.camCustom;
-            delete img.dataset.camOrig;
-        }
-    }
-    function applyAvatarToChat(avatar, customUrl){
-        var chat = document.getElementById('chat') || document;
-        var std = chat.querySelectorAll('.mes .avatar img, .mes .mes_avatar, .mes img.avatar');
-        var emb = collectEmbeddedAvatars(document);
-        var replaced = 0;
-        for(var i=0;i<std.length;i++){
-            var img = std[i];
-            var before = img.getAttribute('src') || '';
-            replaceMessageAvatar(img, avatar, customUrl);
-            if(img.getAttribute('src') !== before) replaced++;
-        }
-        for(var j=0;j<emb.length;j++){
-            var em = emb[j];
-            var before2 = em.getAttribute('src') || '';
-            replaceEmbeddedAvatar(em, customUrl);
-            if(em.getAttribute('src') !== before2) replaced++;
-        }
-        return replaced;
-    }
-    function syncForceAvatarToChatData(customUrl){
-        var c = getContext();
-        var chat = (c && c.chat) || [];
-        if(!Array.isArray(chat) || !chat.length) return 0;
-        var changed = 0;
-        for(var i=0;i<chat.length;i++){
-            var m = chat[i];
-            if(!m || m.is_user) continue;
-            if(customUrl){
-                if(m.force_avatar !== customUrl){ m.force_avatar = customUrl; changed++; }
-            }else{
-                if(m.force_avatar){ delete m.force_avatar; changed++; }
-            }
-        }
-        if(changed){
-            try{
-                if(arcMod.saveChatDebounced) arcMod.saveChatDebounced();
-                else if(c.saveChat) c.saveChat();
-            }catch(e){ console.warn('['+MODULE_NAME+'] 保存存档头像数据失败:', e); }
-        }
-        return changed;
-    }
-    function applyAvatarForCurrentChat(){
-        var c = currentCharacter();
-        if(!c || !c.avatar) return;
-        var url = currentChatAvatarUrl();
-        if(url){
-            applyAvatarToChat(c.avatar, url);
-            syncForceAvatarToChatData(url);
-            setTimeout(function(){ applyAvatarToChat(c.avatar, url); }, 150);
-        }
-    }
-    function scheduleApplyForChat(){
-        if(applyScheduled) return;
-        applyScheduled = true;
-        requestAnimationFrame(function(){
-            applyScheduled = false;
-            applyAvatarForCurrentChat();
-        });
-    }
-    function ensureChatObserver(){
-        if(chatObserver) return;
-        var target = document.body || document.getElementById('chat');
-        if(!target) return;
-        chatObserver = new MutationObserver(function(mutations){
-            var hasNewMes = false;
-            for(var i=0;i<mutations.length;i++){
-                var m = mutations[i];
-                if(m.type !== 'childList') continue;
-                for(var j=0;j<m.addedNodes.length;j++){
-                    var node = m.addedNodes[j];
-                    if(node.nodeType !== 1) continue;
-                    if((node.classList && node.classList.contains('mes'))
-                        || (node.querySelector && (node.querySelector('.mes') || node.querySelector('img.ls-avatar')))){
-                        hasNewMes = true; break;
-                    }
-                }
-                if(hasNewMes) break;
-            }
-            if(hasNewMes) scheduleApplyForChat();
-        });
-        chatObserver.observe(target, { childList:true, subtree:true });
-    }
-    function onMessageRendered(arg){
-        var id = (typeof arg === 'object' && arg !== null) ? arg.id : arg;
-        if(id === undefined || id === null) return;
-        var c = getContext();
-        var chat = (c && c.chat) || [];
-        var m = chat.find(function(x){ return String(x.id) === String(id); });
-        if(m && m.is_user) return;
-        var ch = currentCharacter();
-        if(!ch || !ch.avatar) return;
-        var url = currentChatAvatarUrl();
-        if(!url) return;
-        var el = document.querySelector('#chat .mes[mesid="'+id+'"]') || document.querySelector('.mes[mesid="'+id+'"]');
-        if(!el) return;
-        var img = el.querySelector('.avatar img, .mes_avatar, img.avatar');
-        if(img) replaceMessageAvatar(img, ch.avatar, url);
-        var embedded = collectEmbeddedAvatars(el);
-        for(var i=0;i<embedded.length;i++) replaceEmbeddedAvatar(embedded[i], url);
-    }
-
-    /* ---------- 头像压缩与选择（仅用户主动操作时执行，不占常态开销） ---------- */
-    var AVATAR_MAX_SIZE = 512;
-    function getAvatarFileInput(){
-        if(!avatarFileInput){
-            avatarFileInput = document.createElement('input');
-            avatarFileInput.type = 'file';
-            avatarFileInput.accept = 'image/*';
-            avatarFileInput.style.display = 'none';
-            document.body.appendChild(avatarFileInput);
-        }
-        return avatarFileInput;
-    }
-    async function fileToCompressedDataUrl(file){
-        var bmp = null;
-        try{ bmp = await createImageBitmap(file); }catch(e){ bmp = null; }
-        var w = 0, h = 0, source = null;
-        if(bmp){
-            w = bmp.width; h = bmp.height; source = bmp;
-        }else{
-            var url = URL.createObjectURL(file);
-            try{
-                source = await new Promise(function(resolve, reject){
-                    var im = new Image();
-                    im.onload = function(){ resolve(im); };
-                    im.onerror = function(){ reject(new Error('无法读取图片')); };
-                    im.src = url;
-                });
-                w = source.naturalWidth; h = source.naturalHeight;
-            }finally{ URL.revokeObjectURL(url); }
-        }
-        try{
-            if(!w || !h) throw new Error('无效图片');
-            var scale = Math.min(1, AVATAR_MAX_SIZE / Math.max(w, h));
-            var cw = Math.max(1, Math.round(w * scale));
-            var chh = Math.max(1, Math.round(h * scale));
-            var canvas = document.createElement('canvas');
-            canvas.width = cw; canvas.height = chh;
-            var ctx2d = canvas.getContext('2d');
-            if(ctx2d){ ctx2d.imageSmoothingQuality = 'high'; ctx2d.drawImage(source, 0, 0, cw, chh); }
-            var dataUrl = canvas.toDataURL('image/webp', 0.88);
-            if(dataUrl.indexOf('data:image/webp') !== 0) dataUrl = canvas.toDataURL('image/png');
-            return dataUrl;
-        }finally{
-            if(bmp) bmp.close();
-        }
-    }
-    function openAvatarPicker(onDone){
-        var input = getAvatarFileInput();
-        input.value = '';
-        input.onchange = async function(){
-            var file = input.files && input.files[0];
-            if(!file) return;
-            try{
-                var dataUrl = await fileToCompressedDataUrl(file);
-                onDone(dataUrl);
-            }catch(e){
-                console.error('['+MODULE_NAME+'] 头像处理失败:', e);
-                nicoShowToast('头像处理失败，请换一张图片重试');
-            }
-        };
-        input.click();
-    }
-    function buildAvatarRow(chat, avatar){
-        var row = document.createElement('div');
-        row.className = 'nico-arc-avrow';
-
-        var img = document.createElement('img');
-        img.className = 'nico-arc-avimg';
-        img.alt = '';
-        var custom = getChatAvatar(avatar, chat.file_name);
-        if(custom){
-            img.src = custom;
-            img.title = '该存档的专属头像';
-        }else{
-            img.src = defaultAvatarUrl(avatar);
-            img.classList.add('nico-av-default');
-            img.title = '角色默认头像（未设置专属头像）';
-        }
-
-        var changeBtn = document.createElement('button');
-        changeBtn.type = 'button';
-        changeBtn.className = 'nico-arc-avbtn';
-        changeBtn.innerHTML = SVG_IMAGE + '<span>换头像</span>';
-        changeBtn.title = '为该存档设置专属头像（本地保存，切换存档自动生效）';
-        changeBtn.addEventListener('click', function(){
-            openAvatarPicker(function(dataUrl){
-                setChatAvatar(avatar, chat.file_name, dataUrl);
-                img.src = dataUrl;
-                img.classList.remove('nico-av-default');
-                img.title = '该存档的专属头像';
-                removeBtn.style.display = '';
-                if(isCurrentChat(avatar, chat.file_name)){
-                    applyAvatarToChat(avatar, dataUrl);
-                    syncForceAvatarToChatData(dataUrl);
-                }
-            });
-        });
-
-        var removeBtn = document.createElement('button');
-        removeBtn.type = 'button';
-        removeBtn.className = 'nico-arc-avbtn';
-        removeBtn.innerHTML = SVG_ERASER + '<span>移除</span>';
-        removeBtn.title = '恢复为角色默认头像';
-        removeBtn.style.display = custom ? '' : 'none';
-        removeBtn.addEventListener('click', function(){
-            removeChatAvatar(avatar, chat.file_name);
-            img.src = defaultAvatarUrl(avatar);
-            img.classList.add('nico-av-default');
-            img.title = '角色默认头像（未设置专属头像）';
-            removeBtn.style.display = 'none';
-            if(isCurrentChat(avatar, chat.file_name)){
-                applyAvatarToChat(avatar, null);
-                syncForceAvatarToChatData(null);
-            }
-        });
-
-        row.appendChild(img);
-        row.appendChild(changeBtn);
-        row.appendChild(removeBtn);
-        return row;
-    }
-
-    /* ---------- 存档卡片 ---------- */
-    function stripJsonl(name){ return String(name || '').replace(/\.jsonl$/i,''); }
-    function buildChatRow(chat, avatar, currentChat){
-        var row = document.createElement('div');
-        row.className = 'nico-arc-chat';
-        row.dataset.file = chat.file_name;
-        if(currentChat && stripJsonl(chat.file_name) === currentChat) row.classList.add('nico-cur');
-
-        var meta = document.createElement('div');
-        meta.className = 'nico-arc-meta';
-
-        var title = document.createElement('span');
-        title.className = 'nico-arc-tt';
-        var base = String(chat.file_name || '').replace(/\.jsonl$/i,'');
-        title.textContent = formatTimestampName(base) || base || chat.file_name;
-        title.title = chat.file_name;
-
-        var sub = document.createElement('small');
-        sub.className = 'nico-arc-sub';
-        var msgs = Number.isFinite(Number(chat.chat_items)) ? Number(chat.chat_items) : 0;
-        var subText = msgs + ' 条 · ' + (chat.file_size || '?');
-        var dateStr = formatDateTime(chat.last_mes);
-        if(dateStr) subText += ' · ' + dateStr;
-        sub.textContent = subText;
-
-        var curBadge = document.createElement('span');
-        curBadge.className = 'nico-arc-curbadge';
-        curBadge.textContent = '当前';
-
-        var loadBtn = document.createElement('button');
-        loadBtn.type = 'button';
-        loadBtn.className = 'nico-arc-load';
-        loadBtn.textContent = '加载';
-        loadBtn.title = '切换到该角色并打开这个存档';
-        loadBtn.addEventListener('click', function(){ loadChat(avatar, chat.file_name); });
-
-        meta.appendChild(title);
-        meta.appendChild(sub);
-        if(row.classList.contains('nico-cur')) meta.appendChild(curBadge);
-        meta.appendChild(loadBtn);
-
-        var preview = document.createElement('div');
-        preview.className = 'nico-arc-pv';
-        var mes = chat.mes && chat.mes !== '[The chat is empty]' ? chat.mes : '';
-        preview.textContent = mes;
-        preview.title = mes;
-
-        var noteInput = document.createElement('input');
-        noteInput.className = 'nico-arc-note';
-        noteInput.type = 'text';
-        noteInput.placeholder = '添加备注…';
-        noteInput.maxLength = 200;
-        noteInput.value = notes[noteKey(avatar, chat.file_name)] || '';
-        noteInput.addEventListener('input', function(){
-            ensureSettings();
-            var v = noteInput.value.trim();
-            if(v) notes[noteKey(avatar, chat.file_name)] = v;
-            else delete notes[noteKey(avatar, chat.file_name)];
-            saveSettings();
-        });
-
-        row.appendChild(buildAvatarRow(chat, avatar));
-        row.appendChild(meta);
-        row.appendChild(preview);
-        row.appendChild(noteInput);
-        return row;
-    }
-
-    /* ---------- 加载指定角色的指定存档（与酒馆原生聊天列表点击行为一致） ---------- */
-    async function loadChat(avatar, fileName){
-        var c = getContext();
-        var chars = (c && c.characters) || [];
-        var idx = -1;
-        for(var i=0;i<chars.length;i++){ if(chars[i] && chars[i].avatar === avatar){ idx = i; break; } }
-        if(idx === -1){
-            console.warn('['+MODULE_NAME+'] 找不到角色:', avatar);
-            nicoShowToast('找不到该角色');
-            return;
-        }
-        try{
-            await arcModReady.catch(function(){});
-            var chatBase = stripJsonl(fileName); // 服务端会自动补 .jsonl，传带后缀的会拼成 .jsonl.jsonl
-            if(arcMod.setActiveGroup){ try{ arcMod.setActiveGroup(null); }catch(e){} } // 退出群聊模式
-            await c.selectCharacterById(idx);
-            await c.openCharacterChat(chatBase);
-            setTimeout(function(){ applyAvatarForCurrentChat(); }, 100);
-            nicoShowToast('已加载存档');
-        }catch(e){
-            console.error('['+MODULE_NAME+'] 加载存档失败:', e);
-            nicoShowToast('加载存档失败');
-        }
-    }
-
-    /* ---------- 列表渲染（串行化，签名去重，避免并发重建互相打断） ---------- */
-    function renderCharFolders(force){
-        var run = renderChain.then(function(){ return renderCharFoldersImpl(force); });
-        renderChain = run.catch(function(e){ console.warn('['+MODULE_NAME+'] 渲染失败:', e); });
-        return run;
-    }
-    async function renderCharFoldersImpl(force){
-        if(!listEl) return;
-        var c = getContext();
-        var list = (c && c.characters) || [];
-
-        var sig = list.map(function(ch){ return ch && ch.avatar; }).filter(Boolean).join('');
-        if(!force && countsLoaded && sig === lastSignature){
-            updateStats();
-            return;
-        }
-        lastSignature = sig;
-        listEl.innerHTML = '';
-
-        if(list.length === 0){
-            var empty0 = document.createElement('div');
-            empty0.className = 'nico-arc-empty';
-            empty0.textContent = '未找到角色卡，请先导入角色';
-            listEl.appendChild(empty0);
-            updateStats();
-            return;
-        }
-
-        var frag = document.createDocumentFragment();
-        list.forEach(function(ch){
-            if(!ch || !ch.avatar) return;
-            var n = countsLoaded ? (counts[ch.avatar] !== undefined ? counts[ch.avatar] : 0) : -1;
-            if(countsLoaded && n === 0) return; // 无存档的角色不展示
-            frag.appendChild(buildCharFolder(ch, n));
-        });
-        listEl.appendChild(frag);
-        updateStats();
-
-        // 恢复展开的文件夹
-        await Promise.all(list.map(async function(ch){
-            if(!ch || !expanded.has(ch.avatar)) return;
-            var folder = listEl.querySelector('.nico-arc-char[data-avatar="'+CSS.escape(ch.avatar)+'"]');
-            if(!folder) return;
-            folder.classList.add('nico-open');
-            var body = folder.querySelector('.nico-arc-body');
-            if(body) await renderChatList(ch.avatar, body);
-        }));
-        applyFilter();
-    }
-    function updateCurrentBadges(){
-        if(!arcPage) return;
-        var c = getContext();
-        var current = c && c.chatId;
-        var rows = arcPage.querySelectorAll('.nico-arc-chat');
-        for(var i=0;i<rows.length;i++){
-            var row = rows[i];
-            var isCur = current && stripJsonl(row.dataset.file) === current;
-            row.classList.toggle('nico-cur', !!isCur);
-            var badge = row.querySelector('.nico-arc-curbadge');
-            if(isCur && !badge){
-                badge = document.createElement('span');
-                badge.className = 'nico-arc-curbadge';
-                badge.textContent = '当前';
-                var meta = row.querySelector('.nico-arc-meta');
-                var loadBtn = row.querySelector('.nico-arc-load');
-                if(meta) meta.insertBefore(badge, loadBtn);
-            }else if(!isCur && badge){
-                badge.remove();
-            }
-        }
-    }
-    async function refreshAll(){
-        cacheVersion++;
-        Object.keys(chatsCache).forEach(function(k){ delete chatsCache[k]; });
-        Object.keys(counts).forEach(function(k){ delete counts[k]; });
-        countsLoaded = true;
-        await countsPromise;
-        await loadCounts();
-    }
-
-    /* ---------- 挂载 / 事件 / 初始化 ---------- */
-    function mount(){
-        arcPage = document.getElementById('nico-arc');
-        if(!arcPage) return false;
-        listEl = document.getElementById('nico-arc-list');
-        statsEl = document.getElementById('nico-arc-stats');
-        refreshBtn = document.getElementById('nico-arc-refresh');
-        filterEl = document.getElementById('nico-arc-filter-in');
-        if(refreshBtn && !refreshBtn.dataset.arcBound){
-            refreshBtn.dataset.arcBound = '1';
-            refreshBtn.addEventListener('click', async function(){
-                if(refreshBtn.classList.contains('spin')) return;
-                refreshBtn.classList.add('spin');
-                try{ await refreshAll(); }
-                finally{ refreshBtn.classList.remove('spin'); }
-            });
-        }
-        if(filterEl && !filterEl.dataset.arcBound){
-            filterEl.dataset.arcBound = '1';
-            filterEl.addEventListener('input', applyFilter);
-        }
-        return true;
-    }
-    function onEvent(type, fn){
-        var c = getContext();
-        if(!c || !c.eventSource) return;
-        var et = c.eventTypes || c.event_types || {};
-        var name = et[type];
-        if(!name) return;
-        try{ c.eventSource.on(name, fn); boundEvents.push({ name:name, fn:fn }); }catch(e){}
-    }
-    function onPageShow(){
-        if(!arcPage) return;
-        ensureSettings();
-        if(!countsStarted){
-            countsStarted = true;
-            loadCounts();
-        }else{
-            renderCharFolders();
-        }
-    }
-    function destroy(){
-        var c = getContext();
-        if(c && c.eventSource){
-            boundEvents.forEach(function(b){
-                try{ c.eventSource.removeListener(b.name, b.fn); }
-                catch(e){ try{ c.eventSource.off(b.name, b.fn); }catch(_){} }
-            });
-        }
-        boundEvents = [];
-        timers.forEach(function(id){ clearTimeout(id); });
-        timers = [];
-        try{ if(chatObserver) chatObserver.disconnect(); }catch(e){}
-        chatObserver = null;
-        try{ if(avatarFileInput && avatarFileInput.parentNode) avatarFileInput.parentNode.removeChild(avatarFileInput); }catch(e){}
-        avatarFileInput = null;
-    }
-    var initRetries = 0;
-    function init(){
-        var prev = window.__nicoArchiveMod;
-        if(prev && prev !== mod && typeof prev.destroy === 'function'){ try{ prev.destroy(); }catch(e){} }
-        var ready = false;
-        try{ ready = mount() && !!ensureSettings(); }catch(e){ ready = false; }
-        if(!ready){
-            if(initRetries < 20){ initRetries++; arcTimeout(function(){ init(); }, 500); return; }
-            console.warn('['+MODULE_NAME+'] 初始化条件未就绪，已停止重试（不影响面板其他功能）');
-            return;
-        }
-
-        onEvent('CHARACTER_PAGE_LOADED', function(){
-            var c = getContext();
-            var avatarSet = new Set(((c && c.characters) || []).map(function(ch){ return ch && ch.avatar; }).filter(Boolean));
-            Object.keys(chatsCache).forEach(function(k){ if(!avatarSet.has(k)) delete chatsCache[k]; });
-            Object.keys(counts).forEach(function(k){ if(!avatarSet.has(k)) delete counts[k]; });
-            expanded.forEach(function(k){ if(!avatarSet.has(k)) expanded.delete(k); });
-            if(countsStarted){ countsLoaded = true; loadCounts(); }
-        });
-        onEvent('CHAT_CHANGED', function(){ updateCurrentBadges(); applyAvatarForCurrentChat(); });
-        onEvent('CHARACTER_MESSAGE_RENDERED', onMessageRendered);
-        onEvent('MESSAGE_UPDATED', onMessageRendered);
-        onEvent('CHAT_LOADED', function(){ applyAvatarForCurrentChat(); });
-
-        applyAvatarForCurrentChat();
-        // 酒馆自动恢复上次聊天可能早于本模块激活，延迟补几次（一次性、非轮询）
-        [300, 1000, 2500, 5000].forEach(function(ms){ arcTimeout(function(){ applyAvatarForCurrentChat(); }, ms); });
-        ensureChatObserver();
-        window.__nicoArchiveMod = mod;
-        try{ console.log('[nico-arc] 聊天存档管理器已并入第二页 v'+MODULE_VERSION); }catch(e){}
-    }
-
-    var mod = { init:init, destroy:destroy, onPageShow:onPageShow };
-    return mod;
-})();
-
-/* ===== 7.1 第二页切换（主页 / 聊天存档） ===== */
-var nicoTabEls = panel.querySelectorAll('.nico-tab');
-var nicoHomeEl = panel.querySelector('.nico-p-in');
-var nicoArcEl = panel.querySelector('.nico-arc');
-function nicoSwitchPage(p){
-    for(var i=0;i<nicoTabEls.length;i++){
-        nicoTabEls[i].classList.toggle('on', nicoTabEls[i].dataset.page === p);
-    }
-    if(p === 'arc'){
-        nicoHomeEl.style.display = 'none';
-        nicoArcEl.classList.add('show');
-        try{ nicoArchive.onPageShow(); }catch(e){ console.warn('[nico-arc] 打开存档页失败', e); }
-    }else{
-        nicoArcEl.classList.remove('show');
-        nicoHomeEl.style.display = '';
-    }
-}
-for(var nti=0; nti<nicoTabEls.length; nti++){
-    (function(el){ el.addEventListener('click', function(){ nicoSwitchPage(el.dataset.page); }); })(nicoTabEls[nti]);
-}
-try{ nicoArchive.init(); }catch(e){ console.warn('[nico-arc] 初始化失败（不影响音乐/主页）', e); }
 
 })();
